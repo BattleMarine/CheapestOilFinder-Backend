@@ -1,0 +1,35 @@
+# Build outputs
+.gradle/
+build/
+
+# Logs
+*.log
+*.out
+*.err
+bootrun*.log
+bootrun*.out.log
+bootrun*.err.log
+logs/
+**/logs/
+frontend/logs/
+frontend/**/*.log
+docs/BACKEND_API_ACCESS_CLAIM.md
+docs/archive/BACKEND_API_ACCESS_CLAIM_*.md
+
+# Local secrets. Never commit API keys.
+secrets/
+*.secret
+*.key
+.env
+.env.*
+
+# IDE/local machine files
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
