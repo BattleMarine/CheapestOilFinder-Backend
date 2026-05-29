@@ -1,0 +1,21 @@
+
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_DB: oil_price_db
+      POSTGRES_USER: oil_user
+      POSTGRES_PASSWORD: oil_password
+    ports:
+      - "15432:5432"
+    volumes:
+      - oil_price_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U oil_user -d oil_price_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  oil_price_pgdata:
+    name: oil_price_pgdata

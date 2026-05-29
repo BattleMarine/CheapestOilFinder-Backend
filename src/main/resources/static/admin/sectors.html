@@ -1,0 +1,702 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>5km 커스텀 헥사곤 섹터 관리</title>
+  <style>
+    :root {
+      --bg: #f6f7f9;
+      --panel: #ffffff;
+      --line: #d8dde6;
+      --text: #20242b;
+      --muted: #687182;
+      --land: rgba(255, 255, 255, 0.08);
+      --sea: rgba(223, 232, 242, 0.18);
+      --hot: #ef4444;
+      --warm: #f97316;
+      --cold: #2563eb;
+      --disabled: #6b7280;
+      --control: #ffffff;
+      --control-border: #c6ccd6;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    header {
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 0 20px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+    }
+    h1 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0;
+    }
+    main {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 340px;
+      min-height: calc(100vh - 56px);
+    }
+    .map-wrap {
+      padding: 16px;
+      min-width: 0;
+    }
+    .map-frame {
+      position: relative;
+      height: calc(100vh - 88px);
+      min-height: 560px;
+      border: 1px solid var(--line);
+      background: var(--sea);
+      overflow: hidden;
+    }
+    .map-shell {
+      width: 100%;
+      height: 100%;
+      overflow: auto;
+      user-select: none;
+    }
+    .map-stage {
+      position: relative;
+      width: 3200px;
+      height: 4200px;
+      min-width: 100%;
+      min-height: 100%;
+      margin: 0 auto;
+    }
+    .map-canvas {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 860px;
+      height: 1202px;
+      transform-origin: center center;
+      transform: translate(-50%, -50%) scale(1);
+      will-change: transform;
+    }
+    .map-background {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center center;
+      filter: saturate(0.8) contrast(0.95) brightness(1.04) opacity(0.82);
+      pointer-events: none;
+      user-select: none;
+    }
+    .map-canvas svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+    svg {
+      display: block;
+      user-select: none;
+    }
+    .land {
+      fill: var(--land);
+      stroke: #6b7a90;
+      stroke-width: 0.8;
+    }
+    .sector {
+      fill-opacity: 0.26;
+      stroke-width: 0.45;
+      vector-effect: non-scaling-stroke;
+      cursor: pointer;
+    }
+    .sector:hover,
+    .sector.selected {
+      fill-opacity: 0.72;
+      stroke-width: 1.6;
+    }
+    .HOT { fill: var(--hot); stroke: #991b1b; }
+    .WARM { fill: var(--warm); stroke: #9a3412; }
+    .COLD { fill: var(--cold); stroke: #1e3a8a; }
+    .DISABLED { fill: var(--disabled); stroke: #374151; fill-opacity: 0.18; }
+    .zoom-controls {
+      position: absolute;
+      right: 28px;
+      bottom: 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      z-index: 2;
+      pointer-events: auto;
+    }
+    .zoom-controls button {
+      width: 36px;
+      height: 36px;
+      border: 1px solid var(--control-border);
+      background: var(--control);
+      color: var(--text);
+      font-size: 20px;
+      font-weight: 700;
+      line-height: 1;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+    }
+    .zoom-controls button:hover {
+      background: #f3f5f8;
+    }
+    aside {
+      border-left: 1px solid var(--line);
+      background: var(--panel);
+      padding: 16px;
+      overflow: auto;
+    }
+    .panel-title {
+      margin: 0 0 12px;
+      font-size: 15px;
+      font-weight: 700;
+    }
+    .panel {
+      border: 1px solid var(--line);
+      padding: 12px;
+      margin-bottom: 12px;
+      background: #fff;
+    }
+    .row {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 28px;
+      font-size: 13px;
+      align-items: center;
+    }
+    .muted { color: var(--muted); }
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+    button {
+      height: 34px;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--text);
+      padding: 0 10px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:hover { background: #f3f5f8; }
+    button.primary {
+      background: #20242b;
+      color: #fff;
+      border-color: #20242b;
+    }
+    button.primary:hover { background: #3a414c; }
+    .legend {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      font-size: 13px;
+    }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .swatch {
+      width: 12px;
+      height: 12px;
+      border-radius: 2px;
+      display: inline-block;
+    }
+    .status-actions {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .status-actions button { width: 100%; }
+    .status-actions button.active {
+      outline: 2px solid rgba(32, 36, 43, 0.18);
+      font-weight: 700;
+    }
+    .status-actions button[data-tier="HOT"] { border-color: #fca5a5; }
+    .status-actions button[data-tier="WARM"] { border-color: #fdba74; }
+    .status-actions button[data-tier="COLD"] { border-color: #93c5fd; }
+    .status-actions button[data-tier="DISABLED"] { border-color: #cbd5e1; }
+    .bulk-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .bulk-actions button { width: 100%; }
+    @media (max-width: 900px) {
+      main { grid-template-columns: 1fr; }
+      aside {
+        border-left: 0;
+        border-top: 1px solid var(--line);
+      }
+      .map-shell {
+        height: 68vh;
+        min-height: 420px;
+      }
+    }
+  </style>
+</head>
+<body>
+<header>
+  <h1>5km 커스텀 헥사곤 섹터 관리</h1>
+  <div class="toolbar">
+    <span id="loadState" class="muted">불러오는 중</span>
+    <button type="button" id="enableAllButton">전체 활성화</button>
+    <button type="button" id="disableAllButton">전체 비활성화</button>
+    <button type="button" id="generateButton" class="primary">5km 섹터 생성</button>
+    <button type="button" id="reloadButton">새로고침</button>
+  </div>
+</header>
+
+<main>
+  <section class="map-wrap">
+    <div class="map-frame">
+      <div class="map-shell" id="mapShell">
+        <div class="map-stage" id="mapStage">
+          <div class="map-canvas" id="mapCanvas">
+            <img class="map-background" src="/admin/korea-national-map.jpg" alt="" aria-hidden="true">
+            <svg id="map" viewBox="0 0 860 1202" role="img" aria-label="대한민국 전도 위에 그려진 5km 커스텀 헥사곤 섹터">
+              <rect x="0" y="0" width="860" height="402" fill="var(--sea)"></rect>
+              <g id="viewport">
+                <g id="sectorLayer"></g>
+              </g>
+            </svg>
+          </div>
+        </div>
+      </div>
+      <div class="zoom-controls" aria-label="지도 확대 축소">
+        <button type="button" id="zoomInButton" aria-label="확대">+</button>
+        <button type="button" id="zoomOutButton" aria-label="축소">-</button>
+      </div>
+    </div>
+  </section>
+
+  <aside>
+    <h2 class="panel-title">섹터 현황</h2>
+    <div class="panel">
+      <div class="row"><span>전체</span><strong id="totalCount">-</strong></div>
+      <div class="row"><span>HOT</span><strong id="hotCount">-</strong></div>
+      <div class="row"><span>WARM</span><strong id="warmCount">-</strong></div>
+      <div class="row"><span>COLD</span><strong id="coldCount">-</strong></div>
+      <div class="row"><span>DISABLED</span><strong id="disabledCount">-</strong></div>
+    </div>
+
+    <div class="panel bulk-actions">
+      <button type="button" id="bulkEnableButton">전체 활성화</button>
+      <button type="button" id="bulkDisableButton">전체 비활성화</button>
+    </div>
+
+    <div class="panel">
+      <div class="row"><span class="muted">현재 모드</span><strong id="paintModeLabel">HOT</strong></div>
+      <div class="status-actions" id="paintActions">
+        <button type="button" class="active" data-tier="HOT">HOT</button>
+        <button type="button" data-tier="WARM">WARM</button>
+        <button type="button" data-tier="COLD">COLD</button>
+        <button type="button" data-tier="DISABLED">DISABLED</button>
+      </div>
+    </div>
+
+    <div class="panel legend">
+      <span class="chip"><span class="swatch" style="background: var(--hot)"></span>HOT</span>
+      <span class="chip"><span class="swatch" style="background: var(--warm)"></span>WARM</span>
+      <span class="chip"><span class="swatch" style="background: var(--cold)"></span>COLD</span>
+      <span class="chip"><span class="swatch" style="background: var(--disabled)"></span>DISABLED</span>
+    </div>
+
+    <h2 class="panel-title">선택 섹터</h2>
+    <div id="detail" class="panel muted">섹터를 선택해 주세요.</div>
+
+    <div class="panel muted">
+      섹터는 5km 기준으로 생성되며, 중심점의 WGS84 좌표와 KATEC 좌표를 기준으로 오피넷 호출 반경을 관리합니다.
+      현재 모드에서 섹터를 클릭하면 해당 상태로 바로 칠해집니다.
+    </div>
+  </aside>
+</main>
+
+<script>
+  const width = 890;
+  const height = 1522;
+  const pad = 42;
+  let bounds = { minLat: 33.0, maxLat: 39.6, minLon: 124.4, maxLon: 131.5 };
+
+  const mapSvg = document.getElementById('map');
+  const mapCanvas = document.getElementById('mapCanvas');
+  const mapShell = document.getElementById('mapShell');
+  const mapStage = document.getElementById('mapStage');
+  const viewport = document.getElementById('viewport');
+  const sectorLayer = document.getElementById('sectorLayer');
+  const paintActions = document.getElementById('paintActions');
+  const paintModeLabel = document.getElementById('paintModeLabel');
+  const loadState = document.getElementById('loadState');
+  const detail = document.getElementById('detail');
+
+  const sectorStats = {
+    HOT: document.getElementById('hotCount'),
+    WARM: document.getElementById('warmCount'),
+    COLD: document.getElementById('coldCount'),
+    DISABLED: document.getElementById('disabledCount')
+  };
+
+  const state = {
+    sectors: [],
+    sectorById: new Map(),
+    pathById: new Map(),
+    selectedId: null,
+    paintTier: 'HOT',
+    zoom: 1,
+    panX: 0,
+    panY: 0,
+    minZoom: 0.8,
+    maxZoom: 3,
+    zoomStep: 0.18,
+    suppressClick: false
+  };
+
+  document.getElementById('reloadButton').addEventListener('click', () => loadMap({ preserveSelection: true }));
+  document.getElementById('generateButton').addEventListener('click', generateSectors);
+  document.getElementById('enableAllButton').addEventListener('click', () => setAllEnabled(true));
+  document.getElementById('disableAllButton').addEventListener('click', () => setAllEnabled(false));
+  document.getElementById('bulkEnableButton').addEventListener('click', () => setAllEnabled(true));
+  document.getElementById('bulkDisableButton').addEventListener('click', () => setAllEnabled(false));
+  document.getElementById('zoomInButton').addEventListener('click', () => setZoom(state.zoom + state.zoomStep));
+  document.getElementById('zoomOutButton').addEventListener('click', () => setZoom(state.zoom - state.zoomStep));
+  paintActions.querySelectorAll('button').forEach(button => {
+    button.addEventListener('click', () => setPaintTier(button.dataset.tier));
+  });
+
+  mapSvg.addEventListener('wheel', onWheel, { passive: false });
+
+  loadMap();
+
+  function getDisplayTier(sector) {
+    return sector.enabled ? sector.syncTier : 'DISABLED';
+  }
+
+  function isSameSector(a, b) {
+    return Number(a) === Number(b);
+  }
+
+  async function generateSectors() {
+    loadState.textContent = '섹터를 생성하는 중';
+    const response = await fetch('/api/admin/sectors/generate/custom-hex?sideLengthMeters=5000', { method: 'POST' });
+    if (!response.ok) {
+      loadState.textContent = '섹터 생성 실패';
+      detail.className = 'panel';
+      detail.textContent = await response.text();
+      return;
+    }
+    const result = await response.json();
+    loadState.textContent = `${result.generatedCount.toLocaleString()}개 생성됨`;
+    await loadMap({ preserveSelection: true });
+  }
+
+  async function setAllEnabled(enabled) {
+    const response = await fetch(`/api/admin/sectors/enabled?enabled=${enabled}`, { method: 'POST' });
+    if (!response.ok) {
+      detail.className = 'panel';
+      detail.textContent = await response.text();
+      return;
+    }
+    const result = await response.json();
+    loadState.textContent = enabled
+      ? `전체 활성화 ${result.updatedCount.toLocaleString()}개`
+      : `전체 비활성화 ${result.updatedCount.toLocaleString()}개`;
+    await loadMap({ preserveSelection: true });
+  }
+
+  async function loadMap({ preserveSelection = false } = {}) {
+    const selectedId = preserveSelection ? state.selectedId : null;
+    loadState.textContent = '불러오는 중';
+    sectorLayer.replaceChildren();
+    detail.className = 'panel muted';
+    detail.textContent = '섹터를 선택해 주세요.';
+    state.selectedId = null;
+    state.pathById = new Map();
+    state.sectorById = new Map();
+
+    try {
+      const [geojson, sectors] = await Promise.all([
+        fetch('/admin/south-korea.geojson').then(r => r.json()),
+        fetch('/api/admin/sectors').then(r => r.json())
+      ]);
+      bounds = expandBounds(computeBounds(geojson), 0.04);
+      state.sectors = sectors;
+      state.sectorById = new Map(sectors.map(sector => [sector.sectorId, sector]));
+      renderSectors(sectors);
+      updateStats();
+      refreshPaintControls();
+      loadState.textContent = `${sectors.length.toLocaleString()}개 섹터`;
+      applyTransform();
+      centerScrollbars();
+      if (selectedId !== null && state.sectorById.has(selectedId)) {
+        selectSector(selectedId, true);
+      }
+    } catch (error) {
+      loadState.textContent = '로드 실패';
+      detail.className = 'panel';
+      detail.textContent = error.message;
+    }
+  }
+
+  function renderSectors(sectors) {
+    const fragment = document.createDocumentFragment();
+    for (const sector of sectors) {
+      if (!sector.boundary || sector.boundary.length === 0) continue;
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.dataset.sectorId = String(sector.sectorId);
+      path.setAttribute('class', `sector ${getDisplayTier(sector)}`);
+      path.setAttribute('d', ringToPath(sector.boundary.map(point => [point.lon, point.lat]), true));
+      path.addEventListener('click', () => {
+        if (state.suppressClick) return;
+        if (state.paintTier) {
+          updateSectorStatus(sector.sectorId, state.paintTier);
+          return;
+        }
+        selectSector(sector.sectorId);
+      });
+      state.pathById.set(sector.sectorId, path);
+      fragment.appendChild(path);
+    }
+    sectorLayer.appendChild(fragment);
+  }
+
+  function updateStats() {
+    const counts = { HOT: 0, WARM: 0, COLD: 0, DISABLED: 0 };
+    for (const sector of state.sectors) {
+      counts[getDisplayTier(sector)] += 1;
+    }
+    document.getElementById('totalCount').textContent = state.sectors.length.toLocaleString();
+    for (const tier of Object.keys(sectorStats)) {
+      sectorStats[tier].textContent = counts[tier].toLocaleString();
+    }
+  }
+
+  function selectSector(sectorId, fromReload = false) {
+    if (state.selectedId !== null && !fromReload) {
+      const prev = state.pathById.get(state.selectedId);
+      if (prev) prev.classList.remove('selected');
+    }
+    state.selectedId = sectorId;
+    const path = state.pathById.get(sectorId);
+    const sector = state.sectorById.get(sectorId);
+    if (path) path.classList.add('selected');
+    renderDetail(sector);
+  }
+
+  function renderDetail(sector) {
+    if (!sector) {
+      detail.className = 'panel muted';
+      detail.textContent = '섹터를 선택해 주세요.';
+      return;
+    }
+
+    const displayTier = getDisplayTier(sector);
+    const statusButtons = ['HOT', 'WARM', 'COLD', 'DISABLED'].map(tier => {
+      const activeClass = displayTier === tier ? ' active' : '';
+      return `<button type="button" class="${activeClass.trim()}" data-tier="${tier}" data-sector-id="${sector.sectorId}">${tier}</button>`;
+    }).join('');
+
+    detail.className = 'panel';
+    detail.innerHTML = `
+      <div class="row"><span class="muted">코드</span><strong>${escapeHtml(sector.sectorCode)}</strong></div>
+      <div class="row"><span class="muted">현재 상태</span><strong>${escapeHtml(displayTier)}</strong></div>
+      <div class="row"><span class="muted">저장 tier</span><strong>${escapeHtml(sector.syncTier)}</strong></div>
+      <div class="row"><span class="muted">활성 여부</span><strong>${sector.enabled ? '예' : '아니오'}</strong></div>
+      <div class="row"><span class="muted">중심 위도</span><strong>${sector.centerLat.toFixed(6)}</strong></div>
+      <div class="row"><span class="muted">중심 경도</span><strong>${sector.centerLon.toFixed(6)}</strong></div>
+      <div class="row"><span class="muted">KATEC X</span><strong>${sector.katecX.toFixed(1)}</strong></div>
+      <div class="row"><span class="muted">KATEC Y</span><strong>${sector.katecY.toFixed(1)}</strong></div>
+      <div class="row"><span class="muted">호출 반경</span><strong>${sector.radiusMeters.toLocaleString()}m</strong></div>
+      <div class="row"><span class="muted">한 변</span><strong>${sector.sideLengthMeters.toLocaleString()}m</strong></div>
+      <div class="status-actions">${statusButtons}</div>
+    `;
+
+    detail.querySelectorAll('.status-actions button').forEach(button => {
+      button.addEventListener('click', () => {
+        setPaintTier(button.dataset.tier);
+        updateSectorStatus(sector.sectorId, button.dataset.tier);
+      });
+    });
+  }
+
+  async function updateSectorStatus(sectorId, syncTier) {
+    const response = await fetch(`/api/admin/sectors/${sectorId}/status?syncTier=${encodeURIComponent(syncTier)}`, {
+      method: 'POST'
+    });
+    if (!response.ok) {
+      detail.className = 'panel';
+      detail.textContent = await response.text();
+      return;
+    }
+
+    const updated = await response.json();
+    const index = state.sectors.findIndex(sector => isSameSector(sector.sectorId, updated.sectorId));
+    if (index >= 0) {
+      state.sectors[index] = updated;
+      state.sectorById.set(updated.sectorId, updated);
+    }
+    refreshSectorPath(updated);
+    updateStats();
+    renderDetail(updated);
+  }
+
+  function setPaintTier(tier) {
+    state.paintTier = tier;
+    refreshPaintControls();
+  }
+
+  function refreshPaintControls() {
+    paintModeLabel.textContent = state.paintTier || 'NONE';
+    paintActions.querySelectorAll('button').forEach(button => {
+      button.classList.toggle('active', button.dataset.tier === state.paintTier);
+    });
+  }
+
+  function refreshSectorPath(sector) {
+    const path = state.pathById.get(sector.sectorId);
+    if (!path) return;
+    const className = `sector ${getDisplayTier(sector)}${state.selectedId === sector.sectorId ? ' selected' : ''}`;
+    path.setAttribute('class', className);
+  }
+
+  function setZoom(nextZoom) {
+    state.zoom = Math.min(state.maxZoom, Math.max(state.minZoom, nextZoom));
+    applyTransform();
+  }
+
+  function zoomBy(factor) {
+    setZoom(state.zoom * factor);
+  }
+
+  function applyTransform() {
+    mapCanvas.style.transform = `translate(-50%, -50%) scale(${state.zoom.toFixed(3)})`;
+  }
+
+  function onWheel(event) {
+    event.preventDefault();
+    const factor = event.deltaY < 0 ? 1.12 : 1 / 1.12;
+    zoomBy(factor);
+  }
+
+  function centerScrollbars() {
+    const left = Math.max(0, Math.floor((mapStage.scrollWidth - mapShell.clientWidth) / 2));
+    const top = Math.max(0, Math.floor((mapStage.scrollHeight - mapShell.clientHeight) / 2));
+    mapShell.scrollLeft = left;
+    mapShell.scrollTop = top;
+  }
+
+  function ringToPath(ring, close) {
+    return ring.map((coord, index) => {
+      const p = project(coord[1], coord[0]);
+      return `${index === 0 ? 'M' : 'L'}${p.x.toFixed(2)} ${p.y.toFixed(2)}`;
+    }).join(' ') + (close ? ' Z' : '');
+  }
+
+  function project(lat, lon) {
+    const lonSpan = bounds.maxLon - bounds.minLon;
+    const latSpan = bounds.maxLat - bounds.minLat;
+    const scale = Math.min((width - pad * 2) / lonSpan, (height - pad * 2) / latSpan) * 0.99;
+    const horizontalCompress = 0.80;
+    const verticalCompress = 0.96;
+    const rotationDegrees = -0.8;
+    const projectedWidth = lonSpan * scale * horizontalCompress;
+    const projectedHeight = latSpan * scale;
+    const offsetX = (width - projectedWidth) / 2 + 22;
+    const offsetY = (height - projectedHeight) / 2 + 13;
+    const rawX = offsetX + (lon - bounds.minLon) * scale * horizontalCompress;
+    const rawY = offsetY + (bounds.maxLat - lat) * scale * verticalCompress;
+    const angle = rotationDegrees * Math.PI / 180;
+    const centerX = width / 2;
+    const centerY = height / 2;
+    const dx = rawX - centerX;
+    const dy = rawY - centerY;
+    return {
+      x: centerX + (dx * Math.cos(angle) - dy * Math.sin(angle)),
+      y: centerY + (dx * Math.sin(angle) + dy * Math.cos(angle))
+    };
+  }
+
+  function escapeHtml(value) {
+    return String(value).replace(/[&<>'"]/g, char => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      "'": '&#39;',
+      '"': '&quot;'
+    }[char]));
+  }
+
+  function computeBounds(geojson) {
+    const result = { minLat: Infinity, maxLat: -Infinity, minLon: Infinity, maxLon: -Infinity };
+    for (const feature of geojson.features || []) {
+      collectGeometryBounds(feature.geometry, result);
+    }
+    return result;
+  }
+
+  function collectGeometryBounds(geometry, result) {
+    if (!geometry) return;
+    if (geometry.type === 'Point') {
+      updateBounds(result, geometry.coordinates[1], geometry.coordinates[0]);
+      return;
+    }
+    if (geometry.type === 'LineString' || geometry.type === 'MultiPoint') {
+      for (const coord of geometry.coordinates) {
+        updateBounds(result, coord[1], coord[0]);
+      }
+      return;
+    }
+    if (geometry.type === 'Polygon' || geometry.type === 'MultiLineString') {
+      for (const ring of geometry.coordinates) {
+        for (const coord of ring) {
+          updateBounds(result, coord[1], coord[0]);
+        }
+      }
+      return;
+    }
+    if (geometry.type === 'MultiPolygon') {
+      for (const polygon of geometry.coordinates) {
+        for (const ring of polygon) {
+          for (const coord of ring) {
+            updateBounds(result, coord[1], coord[0]);
+          }
+        }
+      }
+    }
+  }
+
+  function updateBounds(result, lat, lon) {
+    result.minLat = Math.min(result.minLat, lat);
+    result.maxLat = Math.max(result.maxLat, lat);
+    result.minLon = Math.min(result.minLon, lon);
+    result.maxLon = Math.max(result.maxLon, lon);
+  }
+
+  function expandBounds(input, ratio) {
+    const latPad = (input.maxLat - input.minLat) * ratio;
+    const lonPad = (input.maxLon - input.minLon) * ratio;
+    return {
+      minLat: input.minLat - latPad,
+      maxLat: input.maxLat + latPad,
+      minLon: input.minLon - lonPad,
+      maxLon: input.maxLon + lonPad
+    };
+  }
+
+</script>
+</body>
+</html>
