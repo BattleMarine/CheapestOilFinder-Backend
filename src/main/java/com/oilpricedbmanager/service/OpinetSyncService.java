@@ -1,6 +1,7 @@
 package com.oilpricedbmanager.service;
 
 import com.oilpricedbmanager.domain.CoordinatePoint;
+import com.oilpricedbmanager.domain.ForceSyncScope;
 import com.oilpricedbmanager.domain.FuelType;
 import com.oilpricedbmanager.domain.OpinetStationPrice;
 import com.oilpricedbmanager.domain.SyncSector;
@@ -63,19 +64,15 @@ public class OpinetSyncService {
 
     public SyncResponse syncDueSectors(int sectorLimit) {
         return runSync("DUE_SECTORS", () -> {
-            List<SyncSector> sectors = syncSectorRepository.findDueSectors(sectorLimit);
-            int sectorCount = 0;
-            int callCount = 0;
-            int stationCount = 0;
-            for (SyncSector sector : sectors) {
-                for (FuelType fuelType : MVP_FUEL_TYPES) {
-                    stationCount += syncSectorFuel(sector, fuelType);
-                    callCount++;
-                }
-                syncSectorRepository.markSynced(sector.sectorId(), sector.syncTier());
-                sectorCount++;
-            }
-            return "Synced sectors=" + sectorCount + ", calls=" + callCount + ", stationRows=" + stationCount;
+            List<SyncSector> sectors = syncSectorRepository.findAutoDueSectors(sectorLimit);
+            return syncSectorBatch("자동 동기화", sectors);
+        });
+    }
+
+    public SyncResponse forceSync(ForceSyncScope scope) {
+        return runSync(scope.syncType(), () -> {
+            List<SyncSector> sectors = syncSectorRepository.findEnabledSectorsByTiers(scope.tiers());
+            return syncSectorBatch(scope.displayName(), sectors);
         });
     }
 
@@ -123,8 +120,8 @@ public class OpinetSyncService {
         );
     }
 
-    @Scheduled(cron = "0 20 1,2,9,12,16,19 * * *", zone = "Asia/Seoul")
-    public void scheduledFuelSync() {
+    @Scheduled(cron = "0 20 1 * * *", zone = "Asia/Seoul")
+    public void scheduledAutoSectorSync() {
         syncDueSectors(100);
     }
 
@@ -134,6 +131,21 @@ public class OpinetSyncService {
             throw new IllegalStateException(report.errorMessage());
         }
         return report.stationCount();
+    }
+
+    private String syncSectorBatch(String label, List<SyncSector> sectors) {
+        int sectorCount = 0;
+        int callCount = 0;
+        int stationCount = 0;
+        for (SyncSector sector : sectors) {
+            for (FuelType fuelType : MVP_FUEL_TYPES) {
+                stationCount += syncSectorFuel(sector, fuelType);
+                callCount++;
+            }
+            syncSectorRepository.markSynced(sector.sectorId(), sector.syncTier());
+            sectorCount++;
+        }
+        return label + " sectors=" + sectorCount + ", calls=" + callCount + ", stationRows=" + stationCount;
     }
 
     private OpinetFuelSyncReport syncSectorFuelWithReport(SyncSector sector, FuelType fuelType) {

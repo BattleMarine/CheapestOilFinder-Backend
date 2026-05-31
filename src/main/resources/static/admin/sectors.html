@@ -237,6 +237,20 @@
       gap: 8px;
     }
     .bulk-actions button { width: 100%; }
+    .force-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .force-actions button {
+      width: 100%;
+      height: auto;
+      min-height: 38px;
+      line-height: 1.2;
+      padding: 8px 10px;
+      white-space: normal;
+      text-align: center;
+    }
     @media (max-width: 900px) {
       main { grid-template-columns: 1fr; }
       aside {
@@ -298,6 +312,16 @@
     <div class="panel bulk-actions">
       <button type="button" id="bulkEnableButton">전체 활성화</button>
       <button type="button" id="bulkDisableButton">전체 비활성화</button>
+    </div>
+
+    <div class="panel">
+      <div class="row"><span class="muted">강제 재호출</span><strong>수동 동기화</strong></div>
+      <div class="force-actions" id="forceActions">
+        <button type="button" data-scope="HOT_ONLY">HOT만 재호출</button>
+        <button type="button" data-scope="HOT_WARM">HOT+WARM 재호출</button>
+        <button type="button" data-scope="WARM_ONLY">WARM만 재호출</button>
+        <button type="button" data-scope="COLD_ONLY">COLD만 재호출</button>
+      </div>
     </div>
 
     <div class="panel">
@@ -372,6 +396,9 @@
   document.getElementById('disableAllButton').addEventListener('click', () => setAllEnabled(false));
   document.getElementById('bulkEnableButton').addEventListener('click', () => setAllEnabled(true));
   document.getElementById('bulkDisableButton').addEventListener('click', () => setAllEnabled(false));
+  document.getElementById('forceActions').querySelectorAll('button').forEach(button => {
+    button.addEventListener('click', () => forceSync(button.dataset.scope, button.textContent.trim()));
+  });
   document.getElementById('zoomInButton').addEventListener('click', () => setZoom(state.zoom + state.zoomStep));
   document.getElementById('zoomOutButton').addEventListener('click', () => setZoom(state.zoom - state.zoomStep));
   paintActions.querySelectorAll('button').forEach(button => {
@@ -415,6 +442,21 @@
     loadState.textContent = enabled
       ? `전체 활성화 ${result.updatedCount.toLocaleString()}개`
       : `전체 비활성화 ${result.updatedCount.toLocaleString()}개`;
+    await loadMap({ preserveSelection: true });
+  }
+
+  async function forceSync(scope, label) {
+    loadState.textContent = `${label} 중`;
+    const response = await fetch(`/api/admin/sync/sectors/force?scope=${encodeURIComponent(scope)}`, { method: 'POST' });
+    const payloadText = await response.text();
+    if (!response.ok) {
+      loadState.textContent = '강제 재호출 실패';
+      detail.className = 'panel';
+      detail.textContent = payloadText;
+      return;
+    }
+
+    loadState.textContent = payloadText || `${label} 완료`;
     await loadMap({ preserveSelection: true });
   }
 

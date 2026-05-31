@@ -1,5 +1,6 @@
 package com.oilpricedbmanager.controller;
 
+import com.oilpricedbmanager.domain.ForceSyncScope;
 import com.oilpricedbmanager.dto.SyncResponse;
 import com.oilpricedbmanager.dto.OpinetSectorSyncReport;
 import com.oilpricedbmanager.service.OpinetSyncService;
@@ -31,6 +32,11 @@ public class AdminSyncController {
     @PostMapping("/sectors/due")
     public SyncResponse syncDueSectors(@RequestParam(defaultValue = "10") int limit) {
         return opinetSyncService.syncDueSectors(limit);
+    }
+
+    @PostMapping("/sectors/force")
+    public SyncResponse forceSync(@RequestParam ForceSyncScope scope) {
+        return opinetSyncService.forceSync(scope);
     }
 
     @PostMapping("/sectors/{sectorId}")

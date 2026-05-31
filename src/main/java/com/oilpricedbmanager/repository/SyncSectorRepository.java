@@ -32,14 +32,31 @@ public class SyncSectorRepository {
     }
 
     public List<SyncSector> findDueSectors(int limit) {
+        return findAutoDueSectors(limit);
+    }
+
+    public List<SyncSector> findAutoDueSectors(int limit) {
         String sql = selectSql() + """
                 WHERE enabled = true
-                  AND sync_tier <> 'DISABLED'
+                  AND sync_tier IN ('HOT', 'WARM')
                   AND next_sync_at <= CURRENT_TIMESTAMP
                 ORDER BY priority_score DESC, last_synced_at ASC NULLS FIRST, sector_id ASC
                 LIMIT :limit
                 """;
         return jdbcTemplate.query(sql, new MapSqlParameterSource("limit", limit), (rs, rowNum) -> mapSector(rs));
+    }
+
+    public List<SyncSector> findEnabledSectorsByTiers(List<SyncTier> tiers) {
+        if (tiers == null || tiers.isEmpty()) {
+            return List.of();
+        }
+
+        String sql = selectSql() + """
+                WHERE enabled = true
+                  AND sync_tier IN (:tiers)
+                ORDER BY priority_score DESC, last_synced_at ASC NULLS FIRST, sector_id ASC
+                """;
+        return jdbcTemplate.query(sql, new MapSqlParameterSource("tiers", tiers.stream().map(SyncTier::name).toList()), (rs, rowNum) -> mapSector(rs));
     }
 
     public int upsertGeneratedSector(GeneratedHexSector sector) {
@@ -153,9 +170,9 @@ public class SyncSectorRepository {
 
     private static int nextDelayMinutes(SyncTier tier) {
         return switch (tier) {
-            case HOT -> 180;
-            case WARM -> 1440;
-            case COLD -> 10080;
+            case HOT -> 1440;
+            case WARM -> 4320;
+            case COLD -> 525600;
             case DISABLED -> 525600;
         };
     }
