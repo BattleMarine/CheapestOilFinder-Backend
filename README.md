@@ -71,6 +71,7 @@ docker compose up -d
 - `GET /api/admin/sectors`
 - `POST /api/admin/sectors/generate/custom-hex?sideLengthMeters=5000`
 - `POST /api/admin/sync/sectors/due?limit=10`
+- `POST /api/admin/sync/sectors/force?scope=HOT_ONLY|HOT_WARM|WARM_ONLY|COLD_ONLY`
 - `POST /api/admin/sync/sectors/{sectorId}`
 - `POST /api/admin/sync/sectors/{sectorId}/report`
 
@@ -85,6 +86,14 @@ docker compose up -d
 - `D047`: 자동차경유
 
 `K015`는 LPG 코드이지만, 현재 MVP에서는 우선순위가 낮습니다.
+
+### 자동 동기화 주기
+
+- `HOT`: 하루 1회 자동 갱신
+- `WARM`: 3일 1회 자동 갱신
+- `COLD`: 자동 갱신하지 않고, 프론트엔드 또는 관리자 요청이 있을 때만 수동 갱신
+
+주유소와 유가 데이터는 업서트할 때마다 각 테이블의 `updated_at`가 갱신됩니다. 검색 API는 이 갱신 시각을 함께 내려주므로, 프론트엔드에서 데이터가 얼마나 오래됐는지 확인할 수 있습니다.
 
 ### 섹터 상태
 
@@ -128,6 +137,7 @@ http://localhost:8080/admin/sectors.html
 - 섹터 상태 변경
 - 5km 커스텀 헥사곤 섹터 생성
 - 전체 활성화 / 비활성화
+- HOT만 재호출, HOT+WARM 재호출, WARM만 재호출, COLD만 재호출
 - 동기화 대상 섹터 확인
 
 관리자 지도의 기본 흐름은 다음과 같습니다.
