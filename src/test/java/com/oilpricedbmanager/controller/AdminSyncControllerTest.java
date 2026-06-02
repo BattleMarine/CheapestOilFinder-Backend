@@ -1,7 +1,11 @@
 package com.oilpricedbmanager.controller;
 
 import com.oilpricedbmanager.domain.ForceSyncScope;
+import com.oilpricedbmanager.domain.FuelType;
+import com.oilpricedbmanager.domain.SyncRequestSource;
+import com.oilpricedbmanager.dto.AdminSyncLogItem;
 import com.oilpricedbmanager.dto.SyncResponse;
+import com.oilpricedbmanager.repository.AdminSyncLogRepository;
 import com.oilpricedbmanager.service.OpinetSyncService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -9,9 +13,13 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.List;
+
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -24,17 +32,55 @@ class AdminSyncControllerTest {
     @MockBean
     OpinetSyncService opinetSyncService;
 
+    @MockBean
+    AdminSyncLogRepository adminSyncLogRepository;
+
     @Test
-    void force_sync_endpoint_accepts_scope() throws Exception {
-        when(opinetSyncService.forceSync(any()))
+    void force_sync_endpoint_accepts_scope_and_fuel_types() throws Exception {
+        when(opinetSyncService.forceSync(any(), any(), any()))
                 .thenReturn(new SyncResponse("FORCE_HOT_ONLY", "SUCCESS", "HOT만 재호출 sectors=1, calls=3, stationRows=10"));
 
         mockMvc.perform(post("/api/admin/sync/sectors/force")
-                        .param("scope", "HOT_ONLY"))
+                .param("scope", "HOT_ONLY")
+                        .param("fuelTypes", "REGULAR_GASOLINE", "DIESEL")
+                        .param("source", "FRONTEND"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.syncType").value("FORCE_HOT_ONLY"))
                 .andExpect(jsonPath("$.status").value("SUCCESS"));
 
-        verify(opinetSyncService).forceSync(ForceSyncScope.HOT_ONLY);
+        verify(opinetSyncService).forceSync(
+                eq(ForceSyncScope.HOT_ONLY),
+                eq(List.of(FuelType.REGULAR_GASOLINE, FuelType.DIESEL)),
+                eq(SyncRequestSource.FRONTEND)
+        );
+    }
+
+    @Test
+    void recent_sync_logs_endpoint_returns_logs() throws Exception {
+        when(adminSyncLogRepository.findRecent(3)).thenReturn(List.of(
+                new AdminSyncLogItem(
+                        "BATCH",
+                        35L,
+                        null,
+                        null,
+                        "FORCE_HOT_ONLY",
+                        null,
+                        null,
+                        "RUNNING",
+                        null,
+                        "진행 중",
+                        "2026-06-02 10:31:20",
+                        null
+                )
+        ));
+
+        mockMvc.perform(get("/api/admin/sync/logs/recent")
+                        .param("limit", "3"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].logType").value("BATCH"))
+                .andExpect(jsonPath("$[0].syncType").value("FORCE_HOT_ONLY"))
+                .andExpect(jsonPath("$[0].status").value("RUNNING"));
+
+        verify(adminSyncLogRepository).findRecent(3);
     }
 }

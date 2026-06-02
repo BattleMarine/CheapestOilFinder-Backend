@@ -16,7 +16,8 @@ opinet:
   base-url: ${OPINET_BASE_URL:http://www.opinet.co.kr/api}
   api-key: ${OPINET_API_KEY:}
   api-key-file: ${OPINET_API_KEY_FILE:./secrets/opinet-api-key.txt}
-  enabled: ${OPINET_ENABLED:false}
+  enabled: ${OPINET_ENABLED:true}
+  call-interval-millis: ${OPINET_CALL_INTERVAL_MILLIS:30000}
 
 app:
   recommendation:
