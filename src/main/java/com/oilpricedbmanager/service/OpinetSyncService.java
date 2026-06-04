@@ -7,6 +7,7 @@ import com.oilpricedbmanager.domain.OpinetStationPrice;
 import com.oilpricedbmanager.domain.SyncSector;
 import com.oilpricedbmanager.domain.SyncRequestSource;
 import com.oilpricedbmanager.dto.OpinetFuelSyncReport;
+import com.oilpricedbmanager.dto.AdminSyncRuntimeStatus;
 import com.oilpricedbmanager.dto.OpinetSectorSyncReport;
 import com.oilpricedbmanager.dto.OpinetStationPreviewResponse;
 import com.oilpricedbmanager.dto.SyncResponse;
@@ -30,6 +31,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.HashMap;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.function.Supplier;
 import java.util.concurrent.CompletableFuture;
 
@@ -60,7 +64,11 @@ public class OpinetSyncService {
     );
     private long batchSequence = 0L;
     private long nextAllowedCallAtMillis = 0L;
+    private BatchSyncTask activeTask = null;
     private boolean drainingBatchQueue = false;
+    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
+    private static final DateTimeFormatter STATUS_TIME_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+            .withZone(KST);
 
     public OpinetSyncService(
             OpinetClient opinetClient,
@@ -141,6 +149,20 @@ public class OpinetSyncService {
                 normalizedFuelTypes,
                 false
         );
+    }
+
+    public AdminSyncRuntimeStatus getRuntimeStatus() {
+        synchronized (batchQueueMonitor) {
+            BatchSyncTask current = activeTask;
+            if (current != null && !current.isCompleted()) {
+                return current.snapshot("RUNNING", batchTaskByKey.size(), batchQueue.size(), System.currentTimeMillis());
+            }
+            BatchSyncTask waiting = batchQueue.peek();
+            if (waiting != null) {
+                return waiting.snapshot("WAITING", batchTaskByKey.size(), batchQueue.size(), System.currentTimeMillis());
+            }
+            return AdminSyncRuntimeStatus.idle(batchTaskByKey.size(), batchQueue.size());
+        }
     }
 
     public SyncResponse syncSector(long sectorId) {
@@ -260,6 +282,7 @@ public class OpinetSyncService {
                         batchQueueMonitor.notifyAll();
                         return;
                     }
+                    activeTask = task;
                 }
 
                 try {
@@ -271,6 +294,9 @@ public class OpinetSyncService {
                 synchronized (batchQueueMonitor) {
                     if (task.isCompleted()) {
                         batchTaskByKey.remove(task.requestKey());
+                        if (activeTask == task) {
+                            activeTask = null;
+                        }
                     } else {
                         batchQueue.add(task);
                     }
@@ -295,6 +321,7 @@ public class OpinetSyncService {
         private final List<FuelType> fuelTypes;
         private final boolean collectReports;
         private final long sequence;
+        private final long requestedAtMillis = System.currentTimeMillis();
         private final CompletableFuture<SyncResponse> future = new CompletableFuture<>();
         private final List<OpinetFuelSyncReport> reports = new ArrayList<>();
         private final Map<Long, SectorProgress> progressBySectorId = new LinkedHashMap<>();
@@ -302,6 +329,8 @@ public class OpinetSyncService {
         private List<SyncSector> sectors = List.of();
         private boolean started;
         private boolean completed;
+        private long startedAtMillis = -1L;
+        private long finishedAtMillis = -1L;
         private long syncLogId;
         private int sectorIndex;
         private int fuelIndex;
@@ -352,6 +381,7 @@ public class OpinetSyncService {
                 return;
             }
             started = true;
+            startedAtMillis = System.currentTimeMillis();
             syncLogId = syncLogRepository.start(syncType);
             try {
                 sectors = List.copyOf(sectorSupplier.get());
@@ -432,6 +462,7 @@ public class OpinetSyncService {
                 return;
             }
             completed = true;
+            finishedAtMillis = System.currentTimeMillis();
             String message = exception.getMessage();
             syncLogRepository.finish(syncLogId, "FAILED", message);
             future.complete(new SyncResponse(syncType, "FAILED", message));
@@ -442,6 +473,7 @@ public class OpinetSyncService {
                 return;
             }
             completed = true;
+            finishedAtMillis = System.currentTimeMillis();
             String summary = summary();
             String status = retryFailureCount == 0 ? "SUCCESS" : "FAILED";
             syncLogRepository.finish(syncLogId, status, summary);
@@ -452,6 +484,29 @@ public class OpinetSyncService {
             return completed;
         }
 
+        private AdminSyncRuntimeStatus snapshot(String state, int queueSize, int waitingCount, long nowMillis) {
+            long elapsedSeconds = Math.max(0L, (nowMillis - requestedAtMillis) / 1000L);
+            String startedAt = startedAtMillis > 0L ? formatStatusTime(startedAtMillis) : null;
+            String requestedAt = formatStatusTime(requestedAtMillis);
+            String detail = started ? summary() : "대기 중";
+            if (completed) {
+                detail = summary();
+            }
+            return new AdminSyncRuntimeStatus(
+                    state,
+                    label,
+                    syncType,
+                    source.name(),
+                    requestedAt,
+                    startedAt,
+                    elapsedSeconds,
+                    formatElapsed(elapsedSeconds),
+                    queueSize,
+                    waitingCount,
+                    detail
+            );
+        }
+
         private String summary() {
             return label + " sectors=" + sectorCount
                     + ", calls=" + callCount
@@ -459,6 +514,23 @@ public class OpinetSyncService {
                     + ", retryFailures=" + retryFailureCount
                     + ", stationRows=" + stationCount;
         }
+    }
+
+    private static String formatStatusTime(long epochMillis) {
+        return STATUS_TIME_FORMAT.format(Instant.ofEpochMilli(epochMillis));
+    }
+
+    private static String formatElapsed(long totalSeconds) {
+        long hours = totalSeconds / 3600L;
+        long minutes = (totalSeconds % 3600L) / 60L;
+        long seconds = totalSeconds % 60L;
+        if (hours > 0L) {
+            return String.format("%d시간 %02d분 %02d초", hours, minutes, seconds);
+        }
+        if (minutes > 0L) {
+            return String.format("%d분 %02d초", minutes, seconds);
+        }
+        return String.format("%d초", seconds);
     }
 
     private BatchSyncResult processBatch(String label, List<SyncSector> sectors, boolean collectReports) {

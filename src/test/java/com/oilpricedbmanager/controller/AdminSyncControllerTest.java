@@ -4,6 +4,7 @@ import com.oilpricedbmanager.domain.ForceSyncScope;
 import com.oilpricedbmanager.domain.FuelType;
 import com.oilpricedbmanager.domain.SyncRequestSource;
 import com.oilpricedbmanager.dto.AdminSyncLogItem;
+import com.oilpricedbmanager.dto.AdminSyncRuntimeStatus;
 import com.oilpricedbmanager.dto.SyncResponse;
 import com.oilpricedbmanager.repository.AdminSyncLogRepository;
 import com.oilpricedbmanager.service.OpinetSyncService;
@@ -36,12 +37,38 @@ class AdminSyncControllerTest {
     AdminSyncLogRepository adminSyncLogRepository;
 
     @Test
+    void sync_status_endpoint_returns_runtime_status() throws Exception {
+        when(opinetSyncService.getRuntimeStatus()).thenReturn(new AdminSyncRuntimeStatus(
+                "RUNNING",
+                "HOT만 재호출",
+                "FORCE_HOT_ONLY",
+                "MANUAL",
+                "2026-06-04 14:31:36",
+                "2026-06-04 14:31:36",
+                120L,
+                "2분 00초",
+                2,
+                1,
+                "HOT만 재호출 sectors=145, calls=10"
+        ));
+
+        mockMvc.perform(get("/api/admin/sync/status"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.state").value("RUNNING"))
+                .andExpect(jsonPath("$.label").value("HOT만 재호출"))
+                .andExpect(jsonPath("$.elapsedText").value("2분 00초"))
+                .andExpect(jsonPath("$.waitingCount").value(1));
+
+        verify(opinetSyncService).getRuntimeStatus();
+    }
+
+    @Test
     void force_sync_endpoint_accepts_scope_and_fuel_types() throws Exception {
         when(opinetSyncService.forceSync(any(), any(), any()))
                 .thenReturn(new SyncResponse("FORCE_HOT_ONLY", "SUCCESS", "HOT만 재호출 sectors=1, calls=3, stationRows=10"));
 
         mockMvc.perform(post("/api/admin/sync/sectors/force")
-                .param("scope", "HOT_ONLY")
+                        .param("scope", "HOT_ONLY")
                         .param("fuelTypes", "REGULAR_GASOLINE", "DIESEL")
                         .param("source", "FRONTEND"))
                 .andExpect(status().isOk())

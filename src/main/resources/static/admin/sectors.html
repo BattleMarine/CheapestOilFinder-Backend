@@ -1,192 +1,1302 @@
-<!doctype html> <html lang="ko"> <head>   <meta charset="utf-8">   <meta name="viewport" content="width=device-width, initial-scale=1">   <title>5km 커스텀 헥사곤 섹터 관리</title>   <style>     :root {       --bg: #f6f7f9;       --panel: #ffffff;       --line: #d8dde6;       --text: #20242b;       --muted: #687182;       --land: rgba(255, 255, 255, 0.08);       --sea: rgba(223, 232, 242, 0.18);       --hot: #ef4444;       --warm: #f97316;       --cold: #2563eb;       --disabled: #6b7280;       --control: #ffffff;       --control-border: #c6ccd6;     }     * { box-sizing: border-box; }     body {       margin: 0;       background: var(--bg);       color: var(--text);       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;     }     header {       height: 56px;       display: flex;       align-items: center;       justify-content: space-between;       gap: 12px;       padding: 0 20px;       border-bottom: 1px solid var(--line);       background: var(--panel);     }     h1 {       margin: 0;       font-size: 18px;       font-weight: 700;       letter-spacing: 0;     }     main {       display: grid;       grid-template-columns: minmax(0, 1fr) 340px;       min-height: calc(100vh - 56px);     }     .map-wrap {       padding: 16px;       min-width: 0;     }     .map-frame {       position: relative;       height: calc(100vh - 88px);       min-height: 560px;       border: 1px solid var(--line);       background: var(--sea);       overflow: hidden;     }     .map-shell {       width: 100%;       height: 100%;       overflow: auto;       user-select: none;     }     .map-stage {       position: relative;       width: 3200px;       height: 4200px;       min-width: 100%;       min-height: 100%;       margin: 0 auto;     }     .map-canvas {       position: absolute;       left: 50%;       top: 50%;       width: 860px;       height: 1202px;       transform-origin: center center;       transform: translate(-50%, -50%) scale(1);       will-change: transform;     }     .map-background {       position: absolute;       inset: 0;       width: 100%;       height: 100%;       object-fit: cover;       object-position: center center;       filter: saturate(0.8) contrast(0.95) brightness(1.04) opacity(0.82);       pointer-events: none;       user-select: none;     }     .map-canvas svg {       position: absolute;       inset: 0;       width: 100%;       height: 100%;     }     svg {       display: block;       user-select: none;     }     .land {       fill: var(--land);       stroke: #6b7a90;       stroke-width: 0.8;     }     .sector {       fill-opacity: 0.26;       stroke-width: 0.45;       vector-effect: non-scaling-stroke;       cursor: pointer;     }     .sector:hover,     .sector.selected {       fill-opacity: 0.72;       stroke-width: 1.6;     }     .HOT { fill: var(--hot); stroke: #991b1b; }     .WARM { fill: var(--warm); stroke: #9a3412; }     .COLD { fill: var(--cold); stroke: #1e3a8a; }     .DISABLED { fill: var(--disabled); stroke: #374151; fill-opacity: 0.18; }     .zoom-controls {       position: absolute;       right: 28px;       bottom: 28px;       display: flex;       flex-direction: column;       gap: 6px;       z-index: 2;       pointer-events: auto;     }     .zoom-controls button {       width: 36px;       height: 36px;       border: 1px solid var(--control-border);       background: var(--control);       color: var(--text);       font-size: 20px;       font-weight: 700;       line-height: 1;       cursor: pointer;       box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);     }     .zoom-controls button:hover {       background: #f3f5f8;     }     aside {       border-left: 1px solid var(--line);       background: var(--panel);       padding: 16px;       overflow: auto;     }     .panel-title {       margin: 0 0 12px;       font-size: 15px;       font-weight: 700;     }     .panel {       border: 1px solid var(--line);       padding: 12px;       margin-bottom: 12px;       background: #fff;     }     .row {       display: flex;       justify-content: space-between;       gap: 12px;       min-height: 28px;       font-size: 13px;       align-items: center;     }     .muted { color: var(--muted); }     .toolbar {       display: flex;       align-items: center;       gap: 8px;       flex-wrap: wrap;       justify-content: flex-end;     }     button {       height: 34px;       border: 1px solid var(--line);       background: #fff;       color: var(--text);       padding: 0 10px;       font-weight: 600;       cursor: pointer;     }     button:hover { background: #f3f5f8; }     button.primary {       background: #20242b;       color: #fff;       border-color: #20242b;     }     button.primary:hover { background: #3a414c; }     .legend {       display: grid;       grid-template-columns: 1fr 1fr;       gap: 8px;       font-size: 13px;     }     .chip {       display: inline-flex;       align-items: center;       gap: 6px;     }     .swatch {       width: 12px;       height: 12px;       border-radius: 2px;       display: inline-block;     }     .status-actions {       display: grid;       grid-template-columns: repeat(2, minmax(0, 1fr));       gap: 8px;       margin-top: 10px;     }     .status-actions button { width: 100%; }     .status-actions button.active {       outline: 2px solid rgba(32, 36, 43, 0.18);       font-weight: 700;     }     .status-actions button[data-tier="HOT"] { border-color: #fca5a5; }     .status-actions button[data-tier="WARM"] { border-color: #fdba74; }     .status-actions button[data-tier="COLD"] { border-color: #93c5fd; }     .status-actions button[data-tier="DISABLED"] { border-color: #cbd5e1; }     .bulk-actions {       display: grid;       grid-template-columns: 1fr 1fr;       gap: 8px;     }     .bulk-actions button { width: 100%; }     .force-actions {       display: grid;       grid-template-columns: 1fr 1fr;       gap: 8px;     }     .force-actions button {       width: 100%;       height: auto;       min-height: 38px;       line-height: 1.2;       padding: 8px 10px;       white-space: normal;       text-align: center;     }
-.fuel-options {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  margin-top: 10px;
-}
-.fuel-option {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 8px 10px;
-  font-size: 13px;
-  background: #fff;
-}
-.fuel-option input {
-  margin: 0;
-}
-.api-log-panel {
-  margin-top: 12px;
-}
-.api-log-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-height: 320px;
-  overflow: auto;
-  padding-right: 4px;
-}
-.api-log-item {
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 8px;
-  background: #fff;
-  font-size: 12px;
-}
-.api-log-head {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  align-items: center;
-}
-.api-log-title {
-  font-weight: 700;
-}
-.api-log-meta {
-  color: var(--muted);
-  font-size: 11px;
-  margin-top: 4px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.api-log-detail {
-  margin-top: 6px;
-  color: var(--text);
-  font-size: 12px;
-  line-height: 1.35;
-  word-break: break-word;
-  white-space: normal;
-}
-.log-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 6px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 700;
-  border: 1px solid transparent;
-  white-space: nowrap;
-}
-.log-badge.batch { background: #eef2ff; color: #4338ca; border-color: #c7d2fe; }
-.log-badge.sector { background: #f5f3ff; color: #6d28d9; border-color: #ddd6fe; }
-.log-badge.success { background: #ecfdf5; color: #166534; border-color: #bbf7d0; }
-.log-badge.failed { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
-.log-badge.running { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
-.log-badge.stopped { background: #f3f4f6; color: #374151; border-color: #d1d5db; }
-     @media (max-width: 900px) {       main { grid-template-columns: 1fr; }       aside {         border-left: 0;         border-top: 1px solid var(--line);       }       .map-shell {         height: 68vh;         min-height: 420px;       }     }   </style> </head> <body> <header>   <h1>5km 커스텀 헥사곤 섹터 관리</h1>   <div class="toolbar">     <span id="loadState" class="muted">불러오는 중</span>     <button type="button" id="enableAllButton">전체 활성화</button>     <button type="button" id="disableAllButton">전체 비활성화</button>     <button type="button" id="generateButton" class="primary">5km 섹터 생성</button>     <button type="button" id="reloadButton">새로고침</button>   </div> </header>  <main>   <section class="map-wrap">     <div class="map-frame">       <div class="map-shell" id="mapShell">         <div class="map-stage" id="mapStage">           <div class="map-canvas" id="mapCanvas">             <img class="map-background" src="/admin/korea-national-map.jpg" alt="" aria-hidden="true">             <svg id="map" viewBox="0 0 860 1202" role="img" aria-label="대한민국 전도 위에 그려진 5km 커스텀 헥사곤 섹터">               <rect x="0" y="0" width="860" height="402" fill="var(--sea)"></rect>               <g id="viewport">                 <g id="sectorLayer"></g>               </g>             </svg>           </div>         </div>       </div>       <div class="zoom-controls" aria-label="지도 확대 축소">         <button type="button" id="zoomInButton" aria-label="확대">+</button>         <button type="button" id="zoomOutButton" aria-label="축소">-</button>       </div>     </div>   </section>    <aside>     <h2 class="panel-title">섹터 현황</h2>     <div class="panel">       <div class="row"><span>전체</span><strong id="totalCount">-</strong></div>       <div class="row"><span>HOT</span><strong id="hotCount">-</strong></div>       <div class="row"><span>WARM</span><strong id="warmCount">-</strong></div>       <div class="row"><span>COLD</span><strong id="coldCount">-</strong></div>       <div class="row"><span>DISABLED</span><strong id="disabledCount">-</strong></div>     </div>      <div class="panel bulk-actions">       <button type="button" id="bulkEnableButton">전체 활성화</button>       <button type="button" id="bulkDisableButton">전체 비활성화</button>     </div>      <div class="panel">       <div class="row"><span class="muted">강제 재호출</span><strong>수동 동기화</strong></div>       
-<div class="fuel-options" id="fuelTypeOptions">
-  <label class="fuel-option"><input type="checkbox" value="REGULAR_GASOLINE" checked> 일반 휘발유</label>
-  <label class="fuel-option"><input type="checkbox" value="PREMIUM_GASOLINE" checked> 고급 휘발유</label>
-  <label class="fuel-option"><input type="checkbox" value="DIESEL" checked> 경유</label>
-</div>
-      <div class="force-actions" id="forceActions">         <button type="button" data-scope="HOT_ONLY">HOT만 재호출</button>         <button type="button" data-scope="HOT_WARM">HOT+WARM 재호출</button>         <button type="button" data-scope="WARM_ONLY">WARM만 재호출</button>         <button type="button" data-scope="COLD_ONLY">COLD만 재호출</button>       </div>     </div>      
-<div class="panel api-log-panel">
-  <div class="row"><span class="muted">API 호출 로그</span><strong id="apiLogState">최근 12건</strong></div>
-  <div id="apiLogList" class="api-log-list"></div>
-</div>
-<div class="panel">       <div class="row"><span class="muted">현재 모드</span><strong id="paintModeLabel">HOT</strong></div>       <div class="status-actions" id="paintActions">         <button type="button" class="active" data-tier="HOT">HOT</button>         <button type="button" data-tier="WARM">WARM</button>         <button type="button" data-tier="COLD">COLD</button>         <button type="button" data-tier="DISABLED">DISABLED</button>       </div>     </div>      <div class="panel legend">       <span class="chip"><span class="swatch" style="background: var(--hot)"></span>HOT</span>       <span class="chip"><span class="swatch" style="background: var(--warm)"></span>WARM</span>       <span class="chip"><span class="swatch" style="background: var(--cold)"></span>COLD</span>       <span class="chip"><span class="swatch" style="background: var(--disabled)"></span>DISABLED</span>     </div>      <h2 class="panel-title">선택 섹터</h2>     <div id="detail" class="panel muted">섹터를 선택해 주세요.</div>      <div class="panel muted">       섹터는 5km 기준으로 생성되며, 중심점의 WGS84 좌표와 KATEC 좌표를 기준으로 오피넷 호출 반경을 관리합니다.       현재 모드에서 섹터를 클릭하면 해당 상태로 바로 칠해집니다.     </div>   </aside> </main>  <script>   const width = 890;   const height = 1522;   const pad = 42;   let bounds = { minLat: 33.0, maxLat: 39.6, minLon: 124.4, maxLon: 131.5 };    const mapSvg = document.getElementById('map');   const mapCanvas = document.getElementById('mapCanvas');   const mapShell = document.getElementById('mapShell');   const mapStage = document.getElementById('mapStage');   const viewport = document.getElementById('viewport');   const sectorLayer = document.getElementById('sectorLayer');   const paintActions = document.getElementById('paintActions');   const paintModeLabel = document.getElementById('paintModeLabel');   const loadState = document.getElementById('loadState');   const detail = document.getElementById('detail');   const apiLogState = document.getElementById('apiLogState');   const apiLogList = document.getElementById('apiLogList');    const sectorStats = {     HOT: document.getElementById('hotCount'),     WARM: document.getElementById('warmCount'),     COLD: document.getElementById('coldCount'),     DISABLED: document.getElementById('disabledCount')   };    const state = {     sectors: [],     sectorById: new Map(),     pathById: new Map(),     selectedId: null,     paintTier: 'HOT',     zoom: 1,     panX: 0,     panY: 0,     minZoom: 0.8,     maxZoom: 3,     zoomStep: 0.18,     suppressClick: false,     forceSyncTimerId: null,     forceSyncStartedAt: 0,     logRefreshTimerId: null   };    document.getElementById('reloadButton').addEventListener('click', () => loadMap({ preserveSelection: true }));   document.getElementById('generateButton').addEventListener('click', generateSectors);   document.getElementById('enableAllButton').addEventListener('click', () => setAllEnabled(true));   document.getElementById('disableAllButton').addEventListener('click', () => setAllEnabled(false));   document.getElementById('bulkEnableButton').addEventListener('click', () => setAllEnabled(true));   document.getElementById('bulkDisableButton').addEventListener('click', () => setAllEnabled(false));   document.getElementById('forceActions').querySelectorAll('button').forEach(button => {     button.addEventListener('click', () => forceSync(button.dataset.scope, button.textContent.trim()));   });   document.getElementById('zoomInButton').addEventListener('click', () => setZoom(state.zoom + state.zoomStep));   document.getElementById('zoomOutButton').addEventListener('click', () => setZoom(state.zoom - state.zoomStep));   paintActions.querySelectorAll('button').forEach(button => {     button.addEventListener('click', () => setPaintTier(button.dataset.tier));   });    mapSvg.addEventListener('wheel', onWheel, { passive: false });    loadMap();
-  loadRecentLogs();
-  if (state.logRefreshTimerId === null) {
-    state.logRefreshTimerId = window.setInterval(loadRecentLogs, 10000);
-  }    function getDisplayTier(sector) {     return sector.enabled ? sector.syncTier : 'DISABLED';   }    function isSameSector(a, b) {     return Number(a) === Number(b);   }    async function generateSectors() {
-    loadState.textContent = '섹터를 생성하는 중';
-    const response = await fetch('/api/admin/sectors/generate/custom-hex?sideLengthMeters=5000', { method: 'POST' });
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>5km 커스텀 헥사곤 섹터 관리</title>
+  <style>
+    :root {
+      --bg: #f6f7f9;
+      --panel: #ffffff;
+      --line: #d8dde6;
+      --text: #20242b;
+      --muted: #687182;
+      --land: rgba(255, 255, 255, 0.08);
+      --sea: rgba(223, 232, 242, 0.18);
+      --hot: #ef4444;
+      --warm: #f97316;
+      --cold: #2563eb;
+      --disabled: #6b7280;
+      --control: #ffffff;
+      --control-border: #c6ccd6;
+      --shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    header {
+      min-height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 10px 20px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+    }
+
+    .header-title {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0;
+    }
+
+    .header-subtitle {
+      margin: 0;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .toolbar .status-pill {
+      min-height: 34px;
+      padding: 6px 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fafbfc;
+      color: var(--muted);
+      font-size: 13px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+    }
+
+    button {
+      height: 34px;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--text);
+      padding: 0 10px;
+      font-weight: 600;
+      cursor: pointer;
+      border-radius: 6px;
+    }
+
+    button:hover {
+      background: #f3f5f8;
+    }
+
+    button.primary {
+      background: #20242b;
+      color: #fff;
+      border-color: #20242b;
+    }
+
+    button.primary:hover {
+      background: #3a414c;
+    }
+
+    main {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 360px;
+      height: calc(100vh - 64px);
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    .map-wrap {
+      padding: 16px;
+      min-width: 0;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .map-frame {
+      position: relative;
+      height: calc(100vh - 96px);
+      min-height: 560px;
+      border: 1px solid var(--line);
+      background: var(--sea);
+      overflow: hidden;
+    }
+
+    .map-shell {
+      width: 100%;
+      height: 100%;
+      overflow: auto;
+      user-select: none;
+    }
+
+    .map-stage {
+      position: relative;
+      width: 3200px;
+      height: 4200px;
+      min-width: 100%;
+      min-height: 100%;
+      margin: 0 auto;
+    }
+
+    .map-canvas {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 860px;
+      height: 1202px;
+      transform-origin: center center;
+      transform: translate(-50%, -50%) scale(1);
+      will-change: transform;
+    }
+
+    .map-background {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center center;
+      filter: saturate(0.8) contrast(0.95) brightness(1.04) opacity(0.82);
+      pointer-events: none;
+      user-select: none;
+    }
+
+    .map-canvas svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    svg {
+      display: block;
+      user-select: none;
+    }
+
+    .sector {
+      fill-opacity: 0.26;
+      stroke-width: 0.45;
+      vector-effect: non-scaling-stroke;
+      cursor: pointer;
+    }
+
+    .sector:hover,
+    .sector.selected {
+      fill-opacity: 0.72;
+      stroke-width: 1.6;
+    }
+
+    .HOT {
+      fill: var(--hot);
+      stroke: #991b1b;
+    }
+
+    .WARM {
+      fill: var(--warm);
+      stroke: #9a3412;
+    }
+
+    .COLD {
+      fill: var(--cold);
+      stroke: #1e3a8a;
+    }
+
+    .DISABLED {
+      fill: var(--disabled);
+      stroke: #374151;
+      fill-opacity: 0.18;
+    }
+
+    .zoom-controls {
+      position: absolute;
+      right: 28px;
+      bottom: 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      z-index: 2;
+      pointer-events: auto;
+    }
+
+    .zoom-controls button {
+      width: 38px;
+      height: 38px;
+      padding: 0;
+      font-size: 20px;
+      font-weight: 700;
+      line-height: 1;
+      box-shadow: var(--shadow);
+    }
+
+    aside {
+      border-left: 1px solid var(--line);
+      background: var(--panel);
+      padding: 16px;
+      overflow: auto;
+      min-height: 0;
+      height: 100%;
+    }
+
+    .panel-title {
+      margin: 0 0 12px;
+      font-size: 15px;
+      font-weight: 700;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      padding: 12px;
+      margin-bottom: 12px;
+      background: #fff;
+      border-radius: 8px;
+    }
+
+    .panel.compact {
+      padding: 10px 12px;
+    }
+
+    .row {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 28px;
+      font-size: 13px;
+      align-items: center;
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    .status-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .status-grid button {
+      width: 100%;
+    }
+
+    .status-grid button.active {
+      outline: 2px solid rgba(32, 36, 43, 0.18);
+      font-weight: 700;
+    }
+
+    .status-grid button[data-tier="HOT"] {
+      border-color: #fca5a5;
+    }
+
+    .status-grid button[data-tier="WARM"] {
+      border-color: #fdba74;
+    }
+
+    .status-grid button[data-tier="COLD"] {
+      border-color: #93c5fd;
+    }
+
+    .status-grid button[data-tier="DISABLED"] {
+      border-color: #cbd5e1;
+    }
+
+    .bulk-actions,
+    .force-actions,
+    .mode-actions {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .bulk-actions button,
+    .force-actions button,
+    .mode-actions button {
+      width: 100%;
+      min-height: 38px;
+      height: auto;
+      padding: 8px 10px;
+      line-height: 1.2;
+      white-space: normal;
+      text-align: center;
+    }
+
+    .mode-actions button.active {
+      background: #20242b;
+      color: #fff;
+      border-color: #20242b;
+    }
+
+    .fuel-options {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .fuel-option {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-size: 13px;
+      background: #fff;
+    }
+
+    .fuel-option input {
+      margin: 0;
+    }
+
+    .api-log-panel {
+      margin-top: 12px;
+    }
+
+    .api-log-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 320px;
+      overflow: auto;
+      padding-right: 4px;
+    }
+
+    .api-log-item {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 8px;
+      background: #fff;
+      font-size: 12px;
+    }
+
+    .api-log-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .api-log-title {
+      font-weight: 700;
+    }
+
+    .api-log-meta {
+      color: var(--muted);
+      font-size: 11px;
+      margin-top: 4px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .api-log-detail {
+      margin-top: 6px;
+      color: var(--text);
+      font-size: 12px;
+      line-height: 1.35;
+      word-break: break-word;
+      white-space: normal;
+    }
+
+    .log-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 6px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      border: 1px solid transparent;
+      white-space: nowrap;
+    }
+
+    .log-badge.batch {
+      background: #eef2ff;
+      color: #4338ca;
+      border-color: #c7d2fe;
+    }
+
+    .log-badge.sector {
+      background: #f5f3ff;
+      color: #6d28d9;
+      border-color: #ddd6fe;
+    }
+
+    .log-badge.success {
+      background: #ecfdf5;
+      color: #166534;
+      border-color: #bbf7d0;
+    }
+
+    .log-badge.failed {
+      background: #fef2f2;
+      color: #b91c1c;
+      border-color: #fecaca;
+    }
+
+    .log-badge.running {
+      background: #eff6ff;
+      color: #1d4ed8;
+      border-color: #bfdbfe;
+    }
+
+    .log-badge.stopped {
+      background: #f3f4f6;
+      color: #374151;
+      border-color: #d1d5db;
+    }
+
+    .legend {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      font-size: 13px;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .swatch {
+      width: 12px;
+      height: 12px;
+      border-radius: 2px;
+      display: inline-block;
+    }
+
+    .detail-summary {
+      display: grid;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .detail-summary .row {
+      min-height: 24px;
+    }
+
+    .detail-sector-actions {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .detail-sector-actions button {
+      width: 100%;
+    }
+
+    @media (max-width: 900px) {
+      main {
+        grid-template-columns: 1fr;
+        height: auto;
+        overflow: visible;
+      }
+
+      aside {
+        border-left: 0;
+        border-top: 1px solid var(--line);
+        height: auto;
+      }
+
+      .map-shell {
+        height: 68vh;
+        min-height: 420px;
+      }
+    }
+  </style>
+</head>
+<body>
+<header>
+  <div class="header-title">
+    <h1>5km 커스텀 헥사곤 섹터 관리</h1>
+    <p class="header-subtitle">백엔드가 계산한 배치 상태를 기준으로 섹터와 API 호출 로그를 함께 확인합니다.</p>
+  </div>
+  <div class="toolbar">
+    <span id="loadState" class="status-pill" aria-live="polite">불러오는 중</span>
+    <button type="button" id="enableAllButton">전체 활성화</button>
+    <button type="button" id="disableAllButton">전체 비활성화</button>
+    <button type="button" id="generateButton" class="primary">5km 섹터 생성</button>
+    <button type="button" id="reloadButton">새로고침</button>
+  </div>
+</header>
+
+<main>
+  <section class="map-wrap">
+    <div class="map-frame">
+      <div class="map-shell" id="mapShell">
+        <div class="map-stage" id="mapStage">
+          <div class="map-canvas" id="mapCanvas">
+            <img class="map-background" src="/admin/korea-national-map.jpg" alt="" aria-hidden="true">
+            <svg id="map" viewBox="0 0 860 1202" role="img" aria-label="대한민국 전도 위에 그려진 5km 커스텀 헥사곤 섹터">
+              <rect x="0" y="0" width="860" height="402" fill="var(--sea)"></rect>
+              <g id="sectorLayer"></g>
+            </svg>
+          </div>
+        </div>
+      </div>
+      <div class="zoom-controls" aria-label="지도 확대 축소">
+        <button type="button" id="zoomInButton" aria-label="확대">+</button>
+        <button type="button" id="zoomOutButton" aria-label="축소">-</button>
+      </div>
+    </div>
+  </section>
+
+  <aside>
+    <h2 class="panel-title">섹터 현황</h2>
+    <div class="panel">
+      <div class="row"><span>전체</span><strong id="totalCount">-</strong></div>
+      <div class="row"><span>HOT</span><strong id="hotCount">-</strong></div>
+      <div class="row"><span>WARM</span><strong id="warmCount">-</strong></div>
+      <div class="row"><span>COLD</span><strong id="coldCount">-</strong></div>
+      <div class="row"><span>DISABLED</span><strong id="disabledCount">-</strong></div>
+    </div>
+
+    <div class="panel">
+      <div class="row"><span class="muted">백엔드 상태</span><strong id="syncStateText">-</strong></div>
+      <div class="row"><span class="muted">배치</span><strong id="syncLabelText">-</strong></div>
+      <div class="row"><span class="muted">경과</span><strong id="syncElapsedText">-</strong></div>
+      <div class="row"><span class="muted">대기열</span><strong id="syncQueueText">-</strong></div>
+      <div class="row"><span class="muted">요청 시각</span><strong id="syncRequestedAtText">-</strong></div>
+      <div class="row"><span class="muted">시작 시각</span><strong id="syncStartedAtText">-</strong></div>
+      <div class="row"><span class="muted">상세</span><strong id="syncDetailText">-</strong></div>
+    </div>
+
+    <div class="panel bulk-actions">
+      <button type="button" id="bulkEnableButton">전체 활성화</button>
+      <button type="button" id="bulkDisableButton">전체 비활성화</button>
+    </div>
+
+    <div class="panel">
+      <div class="row">
+        <span class="muted">강제 재호출</span>
+        <strong>수동 동기화</strong>
+      </div>
+      <div class="fuel-options" id="fuelTypeOptions">
+        <label class="fuel-option"><input type="checkbox" value="REGULAR_GASOLINE" checked> 일반 휘발유</label>
+        <label class="fuel-option"><input type="checkbox" value="PREMIUM_GASOLINE" checked> 고급 휘발유</label>
+        <label class="fuel-option"><input type="checkbox" value="DIESEL" checked> 경유</label>
+      </div>
+      <div class="force-actions" id="forceActions" style="margin-top:10px;">
+        <button type="button" data-scope="HOT_ONLY">HOT만 재호출</button>
+        <button type="button" data-scope="HOT_WARM">HOT+WARM 재호출</button>
+        <button type="button" data-scope="WARM_ONLY">WARM만 재호출</button>
+        <button type="button" data-scope="COLD_ONLY">COLD만 재호출</button>
+      </div>
+    </div>
+
+    <div class="panel api-log-panel">
+      <div class="row">
+        <span class="muted">API 호출 로그</span>
+        <strong id="apiLogState">최근 12건</strong>
+      </div>
+      <div id="apiLogList" class="api-log-list"></div>
+    </div>
+
+    <div class="panel">
+      <div class="row">
+        <span class="muted">현재 모드</span>
+        <strong id="paintModeLabel">SELECT</strong>
+      </div>
+      <div class="mode-actions" id="paintActions" style="margin-top:10px;">
+        <button type="button" class="active" data-tier="SELECT">선택</button>
+        <button type="button" data-tier="HOT">HOT</button>
+        <button type="button" data-tier="WARM">WARM</button>
+        <button type="button" data-tier="COLD">COLD</button>
+        <button type="button" data-tier="DISABLED">DISABLED</button>
+      </div>
+    </div>
+
+    <div class="panel legend">
+      <span class="chip"><span class="swatch" style="background: var(--hot)"></span>HOT</span>
+      <span class="chip"><span class="swatch" style="background: var(--warm)"></span>WARM</span>
+      <span class="chip"><span class="swatch" style="background: var(--cold)"></span>COLD</span>
+      <span class="chip"><span class="swatch" style="background: var(--disabled)"></span>DISABLED</span>
+    </div>
+
+    <h2 class="panel-title">선택 섹터</h2>
+    <div id="detail" class="panel muted">섹터를 선택해 주세요.</div>
+
+    <div class="panel muted">
+      섹터는 5km 기준으로 생성되며, 중심점의 WGS84 좌표와 KATEC 좌표를 기준으로 오피넷 호출 반경을 관리합니다.
+      현재 모드에서 섹터를 클릭하면 해당 상태로 바로 바뀝니다.
+    </div>
+  </aside>
+</main>
+
+<script>
+  const width = 860;
+  const height = 1202;
+  const pad = 42;
+  let bounds = {
+    minLat: 33.0,
+    maxLat: 39.6,
+    minLon: 124.4,
+    maxLon: 131.5
+  };
+
+  const mapSvg = document.getElementById('map');
+  const mapCanvas = document.getElementById('mapCanvas');
+  const mapShell = document.getElementById('mapShell');
+  const mapStage = document.getElementById('mapStage');
+  const sectorLayer = document.getElementById('sectorLayer');
+  const paintActions = document.getElementById('paintActions');
+  const paintModeLabel = document.getElementById('paintModeLabel');
+  const loadState = document.getElementById('loadState');
+  const detail = document.getElementById('detail');
+  const apiLogState = document.getElementById('apiLogState');
+  const apiLogList = document.getElementById('apiLogList');
+  const syncStateText = document.getElementById('syncStateText');
+  const syncLabelText = document.getElementById('syncLabelText');
+  const syncElapsedText = document.getElementById('syncElapsedText');
+  const syncQueueText = document.getElementById('syncQueueText');
+  const syncRequestedAtText = document.getElementById('syncRequestedAtText');
+  const syncStartedAtText = document.getElementById('syncStartedAtText');
+  const syncDetailText = document.getElementById('syncDetailText');
+
+  const sectorStats = {
+    HOT: document.getElementById('hotCount'),
+    WARM: document.getElementById('warmCount'),
+    COLD: document.getElementById('coldCount'),
+    DISABLED: document.getElementById('disabledCount')
+  };
+
+  const state = {
+    sectors: [],
+    sectorById: new Map(),
+    pathById: new Map(),
+    selectedId: null,
+    paintTier: 'SELECT',
+    zoom: 1,
+    minZoom: 0.8,
+    maxZoom: 3,
+    zoomStep: 0.18,
+    logRefreshTimerId: null,
+    statusRefreshTimerId: null
+  };
+
+  function apiUrl(path) {
+    return `/api/admin${path}`;
+  }
+
+  function escapeHtml(value) {
+    return String(value).replace(/[&<>'"]/g, char => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      "'": '&#39;',
+      '"': '&quot;'
+    }[char]));
+  }
+
+  function isSameSector(a, b) {
+    return Number(a) === Number(b);
+  }
+
+  function getDisplayTier(sector) {
+    return sector.enabled ? sector.syncTier : 'DISABLED';
+  }
+
+  function getSelectedFuelTypes() {
+    return Array.from(document.querySelectorAll('#fuelTypeOptions input[type="checkbox"]:checked'))
+      .map(input => input.value)
+      .filter(Boolean);
+  }
+
+  function formatElapsed(totalSeconds) {
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    if (hours > 0) {
+      return `${hours}시간 ${String(minutes).padStart(2, '0')}분 ${String(seconds).padStart(2, '0')}초`;
+    }
+    if (minutes > 0) {
+      return `${minutes}분 ${String(seconds).padStart(2, '0')}초`;
+    }
+    return `${seconds}초`;
+  }
+
+  async function fetchJson(url, options = {}) {
+    const response = await fetch(url, options);
     if (!response.ok) {
-      loadState.textContent = '섹터 생성 실패';
-      detail.className = 'panel';
-      detail.textContent = await response.text();
+      throw new Error(await response.text());
+    }
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      return response.json();
+    }
+    return response.text();
+  }
+
+  function renderSyncStatus(status) {
+    const totalText = `${state.sectors.length.toLocaleString()}개 섹터`;
+
+    if (!status || status.state === 'IDLE') {
+      loadState.textContent = totalText;
+      syncStateText.textContent = '유휴';
+      syncLabelText.textContent = '-';
+      syncElapsedText.textContent = '-';
+      syncQueueText.textContent = '0';
+      syncRequestedAtText.textContent = '-';
+      syncStartedAtText.textContent = '-';
+      syncDetailText.textContent = '대기 중인 작업이 없습니다.';
       return;
     }
-    const result = await response.json();
-    loadState.textContent = `${result.generatedCount.toLocaleString()}개 생성`;
-    await loadMap({ preserveSelection: true });
+
+    const label = status.label || status.syncType || '오피넷 호출';
+    const phase = status.state === 'WAITING' ? '대기 중' : '진행 중';
+    const elapsedText = status.elapsedText || (status.elapsedSeconds != null ? formatElapsed(status.elapsedSeconds) : '0초');
+    const queueText = `${Number(status.queueSize || 0).toLocaleString()}개 / 대기 ${Number(status.waitingCount || 0).toLocaleString()}개`;
+
+    loadState.textContent = `${totalText} · ${label} ${phase} ${elapsedText}${status.waitingCount > 0 ? ` · 대기 ${Number(status.waitingCount).toLocaleString()}건` : ''}`;
+    syncStateText.textContent = phase;
+    syncLabelText.textContent = `${label}${status.source ? ` (${status.source})` : ''}`;
+    syncElapsedText.textContent = elapsedText;
+    syncQueueText.textContent = queueText;
+    syncRequestedAtText.textContent = status.requestedAt || '-';
+    syncStartedAtText.textContent = status.startedAt || '-';
+    syncDetailText.textContent = status.detail || '-';
+  }
+
+  async function refreshSyncStatus() {
+    try {
+      const status = await fetchJson(apiUrl('/sync/status'));
+      renderSyncStatus(status);
+    } catch (error) {
+      if (state.sectors.length > 0) {
+        loadState.textContent = `${state.sectors.length.toLocaleString()}개 섹터`;
+      }
+    }
+  }
+
+  async function loadRecentLogs() {
+    if (!apiLogState || !apiLogList) {
+      return;
+    }
+
+    apiLogState.textContent = '불러오는 중';
+    try {
+      const logs = await fetchJson(apiUrl('/sync/logs/recent?limit=12'));
+      apiLogList.replaceChildren();
+
+      if (!Array.isArray(logs) || logs.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'api-log-item muted';
+        empty.textContent = '최근 호출 로그가 없습니다.';
+        apiLogList.appendChild(empty);
+        apiLogState.textContent = '최근 0건';
+        return;
+      }
+
+      for (const log of logs) {
+        apiLogList.appendChild(renderLogItem(log));
+      }
+
+      apiLogState.textContent = `최근 ${logs.length}건`;
+    } catch (error) {
+      apiLogState.textContent = '로그 불러오기 실패';
+      apiLogList.replaceChildren();
+      const item = document.createElement('div');
+      item.className = 'api-log-item';
+      item.textContent = error instanceof Error ? error.message : String(error);
+      apiLogList.appendChild(item);
+    }
+  }
+
+  function renderLogItem(log) {
+    const item = document.createElement('div');
+    item.className = 'api-log-item';
+
+    const head = document.createElement('div');
+    head.className = 'api-log-head';
+
+    const title = document.createElement('div');
+    title.className = 'api-log-title';
+    title.textContent = log.logType === 'BATCH'
+      ? (log.syncType || 'BATCH')
+      : `${log.sectorCode || `SECTOR-${log.refId}`}`;
+
+    const badges = document.createElement('div');
+    badges.style.display = 'flex';
+    badges.style.gap = '6px';
+    badges.style.flexWrap = 'wrap';
+
+    const makeBadge = (text, className) => {
+      const badge = document.createElement('span');
+      badge.className = `log-badge ${className}`;
+      badge.textContent = text;
+      return badge;
+    };
+
+    badges.appendChild(makeBadge(log.logType || 'LOG', log.logType === 'BATCH' ? 'batch' : 'sector'));
+    badges.appendChild(makeBadge(log.status || '-', (log.status || '').toLowerCase() || 'running'));
+    if (log.fuelType) {
+      badges.appendChild(makeBadge(log.fuelType, 'running'));
+    }
+
+    head.appendChild(title);
+    head.appendChild(badges);
+
+    const meta = document.createElement('div');
+    meta.className = 'api-log-meta';
+    const metaItems = [];
+    if (log.refId !== null && log.refId !== undefined) metaItems.push(`ID ${log.refId}`);
+    if (log.startedAt) metaItems.push(`시작 ${log.startedAt}`);
+    if (log.finishedAt) metaItems.push(`종료 ${log.finishedAt}`);
+    if (log.opinetProdcd) metaItems.push(`유종 ${log.opinetProdcd}`);
+    if (log.stationCount !== null && log.stationCount !== undefined) metaItems.push(`건수 ${log.stationCount}`);
+    meta.textContent = metaItems.join(' · ');
+
+    const detailText = document.createElement('div');
+    detailText.className = 'api-log-detail';
+    detailText.textContent = log.detail || '-';
+
+    item.appendChild(head);
+    item.appendChild(meta);
+    item.appendChild(detailText);
+    return item;
+  }
+
+  async function generateSectors() {
+    loadState.textContent = '섹터를 생성하는 중';
+    try {
+      const result = await fetchJson(apiUrl('/sectors/generate/custom-hex?sideLengthMeters=5000'), {
+        method: 'POST'
+      });
+      loadState.textContent = `${Number(result.generatedCount || 0).toLocaleString()}개 생성됨`;
+      await loadMap({ preserveSelection: true });
+    } catch (error) {
+      loadState.textContent = '섹터 생성 실패';
+      detail.className = 'panel';
+      detail.textContent = error instanceof Error ? error.message : String(error);
+    }
   }
 
   async function setAllEnabled(enabled) {
-    const response = await fetch(`/api/admin/sectors/enabled?enabled=${enabled}`, { method: 'POST' });
-    if (!response.ok) {
+    try {
+      const result = await fetchJson(apiUrl(`/sectors/enabled?enabled=${enabled}`), {
+        method: 'POST'
+      });
+      loadState.textContent = enabled
+        ? `전체 활성화 ${Number(result.updatedCount || 0).toLocaleString()}개`
+        : `전체 비활성화 ${Number(result.updatedCount || 0).toLocaleString()}개`;
+      await loadMap({ preserveSelection: true });
+    } catch (error) {
       detail.className = 'panel';
-      detail.textContent = await response.text();
-      return;
+      detail.textContent = error instanceof Error ? error.message : String(error);
     }
-    const result = await response.json();
-    loadState.textContent = enabled
-      ? `전체 활성화 ${result.updatedCount.toLocaleString()}개`
-      : `전체 비활성화 ${result.updatedCount.toLocaleString()}개`;
-    await loadMap({ preserveSelection: true });
   }
 
-
-async function forceSync(scope, label) {
-  const fuelTypes = getSelectedFuelTypes();
-  if (!fuelTypes.length) {
-    loadState.textContent = '선택된 유종이 없습니다.';
-    return;
-  }
-
-  const params = new URLSearchParams();
-  params.set('scope', scope);
-  fuelTypes.forEach(fuelType => params.append('fuelTypes', fuelType));
-
-  startForceSyncTimer(label);
-  try {
-    const response = await fetch(`/api/admin/sync/sectors/force?${params.toString()}`, { method: 'POST' });
-    const payloadText = await response.text();
-    stopForceSyncTimer();
-    if (!response.ok) {
-      loadState.textContent = '유종 호출 실패';
-      detail.className = 'panel';
-      detail.textContent = payloadText;
+  async function forceSync(scope, label) {
+    const fuelTypes = getSelectedFuelTypes();
+    if (!fuelTypes.length) {
+      loadState.textContent = '유종을 선택해 주세요.';
       return;
     }
 
-    loadState.textContent = payloadText || `${label} 완료`;
-    await loadMap({ preserveSelection: true });
-  } catch (error) {
-    stopForceSyncTimer();
-    loadState.textContent = '유종 호출 실패';
-    detail.className = 'panel';
-    detail.textContent = error instanceof Error ? error.message : String(error);
+    loadState.textContent = `${label} 요청 중`;
+    try {
+      const params = new URLSearchParams();
+      params.set('scope', scope);
+      params.set('source', 'MANUAL');
+      for (const fuelType of fuelTypes) {
+        params.append('fuelTypes', fuelType);
+      }
+
+      const result = await fetchJson(apiUrl(`/sync/sectors/force?${params.toString()}`), {
+        method: 'POST'
+      });
+
+      const payloadText = result && typeof result === 'object'
+        ? (result.message || result.summary || `${label} 완료`)
+        : `${label} 완료`;
+
+      loadState.textContent = payloadText;
+      await Promise.all([
+        refreshSyncStatus(),
+        loadRecentLogs(),
+        loadMap({ preserveSelection: true })
+      ]);
+    } catch (error) {
+      loadState.textContent = '강제 재호출 실패';
+      detail.className = 'panel';
+      detail.textContent = error instanceof Error ? error.message : String(error);
+    }
   }
-}
 
   async function loadMap({ preserveSelection = false } = {}) {
-    const selectedId = preserveSelection ? state.selectedId : null;
     loadState.textContent = '불러오는 중';
-    sectorLayer.replaceChildren();
-    detail.className = 'panel muted';
-    detail.textContent = '섹터를 선택해 주세요.';
-    state.selectedId = null;
-    state.pathById = new Map();
-    state.sectorById = new Map();
-
     try {
-      const [geojson, sectors] = await Promise.all([
-        fetch('/admin/south-korea.geojson').then(r => r.json()),
-        fetch('/api/admin/sectors').then(r => r.json())
-      ]);
-      bounds = expandBounds(computeBounds(geojson), 0.04);
-      state.sectors = sectors;
-      state.sectorById = new Map(sectors.map(sector => [sector.sectorId, sector]));
-      renderSectors(sectors);
+      const sectors = await fetchJson(apiUrl('/sectors'));
+      state.sectors = Array.isArray(sectors) ? sectors : [];
+      state.sectorById = new Map(state.sectors.map(sector => [sector.sectorId, sector]));
+      state.pathById.clear();
+
+      sectorLayer.replaceChildren();
+      renderSectors(state.sectors);
       updateStats();
-      refreshPaintControls();
-      loadState.textContent = `${sectors.length.toLocaleString()}개 섹터`;
       applyTransform();
       centerScrollbars();
-      void loadRecentLogs();
-      if (selectedId !== null && state.sectorById.has(selectedId)) {
-        selectSector(selectedId, true);
+
+      if (preserveSelection && state.selectedId !== null && state.sectorById.has(state.selectedId)) {
+        selectSector(state.selectedId, true);
+      } else if (!preserveSelection && state.sectors.length > 0) {
+        selectSector(state.sectors[0].sectorId, true);
+      } else if (state.selectedId !== null && !state.sectorById.has(state.selectedId)) {
+        state.selectedId = null;
+        detail.className = 'panel muted';
+        detail.textContent = '섹터를 선택해 주세요.';
       }
+
+      await refreshSyncStatus();
+      await loadRecentLogs();
     } catch (error) {
       loadState.textContent = '로드 실패';
       detail.className = 'panel';
-      detail.textContent = error.message;
+      detail.textContent = error instanceof Error ? error.message : String(error);
     }
   }
 
-  function renderSectors(sectors) {     const fragment = document.createDocumentFragment();     for (const sector of sectors) {       if (!sector.boundary || sector.boundary.length === 0) continue;       const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');       path.dataset.sectorId = String(sector.sectorId);       path.setAttribute('class', `sector ${getDisplayTier(sector)}`);       path.setAttribute('d', ringToPath(sector.boundary.map(point => [point.lon, point.lat]), true));       path.addEventListener('click', () => {         if (state.suppressClick) return;         if (state.paintTier) {           updateSectorStatus(sector.sectorId, state.paintTier);           return;         }         selectSector(sector.sectorId);       });       state.pathById.set(sector.sectorId, path);       fragment.appendChild(path);     }     sectorLayer.appendChild(fragment);   }    function updateStats() {     const counts = { HOT: 0, WARM: 0, COLD: 0, DISABLED: 0 };     for (const sector of state.sectors) {       counts[getDisplayTier(sector)] += 1;     }     document.getElementById('totalCount').textContent = state.sectors.length.toLocaleString();     for (const tier of Object.keys(sectorStats)) {       sectorStats[tier].textContent = counts[tier].toLocaleString();     }   }    function selectSector(sectorId, fromReload = false) {     if (state.selectedId !== null && !fromReload) {       const prev = state.pathById.get(state.selectedId);       if (prev) prev.classList.remove('selected');     }     state.selectedId = sectorId;     const path = state.pathById.get(sectorId);     const sector = state.sectorById.get(sectorId);     if (path) path.classList.add('selected');     renderDetail(sector);   }    function renderDetail(sector) {     if (!sector) {       detail.className = 'panel muted';       detail.textContent = '섹터를 선택해 주세요.';       return;     }      const displayTier = getDisplayTier(sector);     const statusButtons = ['HOT', 'WARM', 'COLD', 'DISABLED'].map(tier => {       const activeClass = displayTier === tier ? ' active' : '';       return `<button type="button" class="${activeClass.trim()}" data-tier="${tier}" data-sector-id="${sector.sectorId}">${tier}</button>`;     }).join('');      detail.className = 'panel';     detail.innerHTML = `       <div class="row"><span class="muted">코드</span><strong>${escapeHtml(sector.sectorCode)}</strong></div>       <div class="row"><span class="muted">현재 상태</span><strong>${escapeHtml(displayTier)}</strong></div>       <div class="row"><span class="muted">저장 tier</span><strong>${escapeHtml(sector.syncTier)}</strong></div>       <div class="row"><span class="muted">활성 여부</span><strong>${sector.enabled ? '예' : '아니오'}</strong></div>       <div class="row"><span class="muted">중심 위도</span><strong>${sector.centerLat.toFixed(6)}</strong></div>       <div class="row"><span class="muted">중심 경도</span><strong>${sector.centerLon.toFixed(6)}</strong></div>       <div class="row"><span class="muted">KATEC X</span><strong>${sector.katecX.toFixed(1)}</strong></div>       <div class="row"><span class="muted">KATEC Y</span><strong>${sector.katecY.toFixed(1)}</strong></div>       <div class="row"><span class="muted">호출 반경</span><strong>${sector.radiusMeters.toLocaleString()}m</strong></div>       <div class="row"><span class="muted">한 변</span><strong>${sector.sideLengthMeters.toLocaleString()}m</strong></div>       <div class="status-actions">${statusButtons}</div>     `;      detail.querySelectorAll('.status-actions button').forEach(button => {       button.addEventListener('click', () => {         setPaintTier(button.dataset.tier);         updateSectorStatus(sector.sectorId, button.dataset.tier);       });     });   }    async function updateSectorStatus(sectorId, syncTier) {     const response = await fetch(`/api/admin/sectors/${sectorId}/status?syncTier=${encodeURIComponent(syncTier)}`, {       method: 'POST'     });     if (!response.ok) {       detail.className = 'panel';       detail.textContent = await response.text();       return;     }      const updated = await response.json();     const index = state.sectors.findIndex(sector => isSameSector(sector.sectorId, updated.sectorId));     if (index >= 0) {       state.sectors[index] = updated;       state.sectorById.set(updated.sectorId, updated);     }     refreshSectorPath(updated);     updateStats();     renderDetail(updated);   }    function setPaintTier(tier) {     state.paintTier = tier;     refreshPaintControls();   }    function startForceSyncTimer(label) {     stopForceSyncTimer();     state.forceSyncStartedAt = Date.now();     loadState.textContent = `${label} 중 0초`;     state.forceSyncTimerId = window.setInterval(() => {       const elapsedSeconds = Math.floor((Date.now() - state.forceSyncStartedAt) / 1000);       loadState.textContent = `${label} 중 ${elapsedSeconds}초`;     }, 1000);   }    function stopForceSyncTimer() {     if (state.forceSyncTimerId !== null) {       clearInterval(state.forceSyncTimerId);       state.forceSyncTimerId = null;     }   }    function refreshPaintControls() {     paintModeLabel.textContent = state.paintTier || 'NONE';     paintActions.querySelectorAll('button').forEach(button => {       button.classList.toggle('active', button.dataset.tier === state.paintTier);     });   }    function refreshSectorPath(sector) {     const path = state.pathById.get(sector.sectorId);     if (!path) return;     const className = `sector ${getDisplayTier(sector)}${state.selectedId === sector.sectorId ? ' selected' : ''}`;     path.setAttribute('class', className);   }    function setZoom(nextZoom) {     state.zoom = Math.min(state.maxZoom, Math.max(state.minZoom, nextZoom));     applyTransform();   }    function zoomBy(factor) {     setZoom(state.zoom * factor);   }    function applyTransform() {     mapCanvas.style.transform = `translate(-50%, -50%) scale(${state.zoom.toFixed(3)})`;   }    function onWheel(event) {     event.preventDefault();     const factor = event.deltaY < 0 ? 1.12 : 1 / 1.12;     zoomBy(factor);   }    function centerScrollbars() {     const left = Math.max(0, Math.floor((mapStage.scrollWidth - mapShell.clientWidth) / 2));     const top = Math.max(0, Math.floor((mapStage.scrollHeight - mapShell.clientHeight) / 2));     mapShell.scrollLeft = left;     mapShell.scrollTop = top;   }    function ringToPath(ring, close) {     return ring.map((coord, index) => {       const p = project(coord[1], coord[0]);       return `${index === 0 ? 'M' : 'L'}${p.x.toFixed(2)} ${p.y.toFixed(2)}`;     }).join(' ') + (close ? ' Z' : '');   }    function project(lat, lon) {     const lonSpan = bounds.maxLon - bounds.minLon;     const latSpan = bounds.maxLat - bounds.minLat;     const scale = Math.min((width - pad * 2) / lonSpan, (height - pad * 2) / latSpan) * 0.99;     const horizontalCompress = 0.80;     const verticalCompress = 0.96;     const rotationDegrees = -0.8;     const projectedWidth = lonSpan * scale * horizontalCompress;     const projectedHeight = latSpan * scale;     const offsetX = (width - projectedWidth) / 2 + 22;     const offsetY = (height - projectedHeight) / 2 + 13;     const rawX = offsetX + (lon - bounds.minLon) * scale * horizontalCompress;     const rawY = offsetY + (bounds.maxLat - lat) * scale * verticalCompress;     const angle = rotationDegrees * Math.PI / 180;     const centerX = width / 2;     const centerY = height / 2;     const dx = rawX - centerX;     const dy = rawY - centerY;     return {       x: centerX + (dx * Math.cos(angle) - dy * Math.sin(angle)),       y: centerY + (dx * Math.sin(angle) + dy * Math.cos(angle))     };   }    function escapeHtml(value) {     return String(value).replace(/[&<>'"]/g, char => ({       '&': '&amp;',       '<': '&lt;',       '>': '&gt;',       "'": '&#39;',       '"': '&quot;'     }[char]));   }    function computeBounds(geojson) {     const result = { minLat: Infinity, maxLat: -Infinity, minLon: Infinity, maxLon: -Infinity };     for (const feature of geojson.features || []) {       collectGeometryBounds(feature.geometry, result);     }     return result;   }    function collectGeometryBounds(geometry, result) {     if (!geometry) return;     if (geometry.type === 'Point') {       updateBounds(result, geometry.coordinates[1], geometry.coordinates[0]);       return;     }     if (geometry.type === 'LineString' || geometry.type === 'MultiPoint') {       for (const coord of geometry.coordinates) {         updateBounds(result, coord[1], coord[0]);       }       return;     }     if (geometry.type === 'Polygon' || geometry.type === 'MultiLineString') {       for (const ring of geometry.coordinates) {         for (const coord of ring) {           updateBounds(result, coord[1], coord[0]);         }       }       return;     }     if (geometry.type === 'MultiPolygon') {       for (const polygon of geometry.coordinates) {         for (const ring of polygon) {           for (const coord of ring) {             updateBounds(result, coord[1], coord[0]);           }         }       }     }   }    function updateBounds(result, lat, lon) {     result.minLat = Math.min(result.minLat, lat);     result.maxLat = Math.max(result.maxLat, lat);     result.minLon = Math.min(result.minLon, lon);     result.maxLon = Math.max(result.maxLon, lon);   }    function expandBounds(input, ratio) {     const latPad = (input.maxLat - input.minLat) * ratio;     const lonPad = (input.maxLon - input.minLon) * ratio;     return {       minLat: input.minLat - latPad,       maxLat: input.maxLat + latPad,       minLon: input.minLon - lonPad,       maxLon: input.maxLon + lonPad     };   }  </script> </body> </html>
+  function renderSectors(sectors) {
+    const fragment = document.createDocumentFragment();
+    for (const sector of sectors) {
+      if (!sector.boundary || sector.boundary.length === 0) {
+        continue;
+      }
+
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.dataset.sectorId = String(sector.sectorId);
+      path.setAttribute('class', `sector ${getDisplayTier(sector)}`);
+      path.setAttribute('d', ringToPath(sector.boundary.map(point => [point.lon, point.lat]), true));
+      path.addEventListener('click', () => {
+        if (state.paintTier === 'SELECT') {
+          selectSector(sector.sectorId);
+          return;
+        }
+
+        updateSectorStatus(sector.sectorId, state.paintTier);
+      });
+
+      state.pathById.set(sector.sectorId, path);
+      fragment.appendChild(path);
+    }
+    sectorLayer.appendChild(fragment);
+  }
+
+  function updateStats() {
+    const counts = { HOT: 0, WARM: 0, COLD: 0, DISABLED: 0 };
+    for (const sector of state.sectors) {
+      counts[getDisplayTier(sector)] += 1;
+    }
+
+    document.getElementById('totalCount').textContent = state.sectors.length.toLocaleString();
+    for (const tier of Object.keys(sectorStats)) {
+      sectorStats[tier].textContent = counts[tier].toLocaleString();
+    }
+  }
+
+  function selectSector(sectorId, fromReload = false) {
+    if (state.selectedId !== null && !fromReload) {
+      const previous = state.pathById.get(state.selectedId);
+      if (previous) {
+        previous.classList.remove('selected');
+      }
+    }
+
+    state.selectedId = sectorId;
+    const path = state.pathById.get(sectorId);
+    const sector = state.sectorById.get(sectorId);
+    if (path) {
+      path.classList.add('selected');
+    }
+    renderDetail(sector);
+  }
+
+  function renderDetail(sector) {
+    if (!sector) {
+      detail.className = 'panel muted';
+      detail.textContent = '섹터를 선택해 주세요.';
+      return;
+    }
+
+    const displayTier = getDisplayTier(sector);
+    const statusButtons = ['HOT', 'WARM', 'COLD', 'DISABLED'].map(tier => {
+      const activeClass = displayTier === tier ? 'active' : '';
+      return `<button type="button" class="${activeClass}" data-tier="${tier}" data-sector-id="${sector.sectorId}">${tier}</button>`;
+    }).join('');
+
+    detail.className = 'panel';
+    detail.innerHTML = `
+      <div class="detail-summary">
+        <div class="row"><span class="muted">코드</span><strong>${escapeHtml(sector.sectorCode)}</strong></div>
+        <div class="row"><span class="muted">현재 상태</span><strong>${escapeHtml(displayTier)}</strong></div>
+        <div class="row"><span class="muted">저장 tier</span><strong>${escapeHtml(sector.syncTier)}</strong></div>
+        <div class="row"><span class="muted">활성 여부</span><strong>${sector.enabled ? '예' : '아니오'}</strong></div>
+        <div class="row"><span class="muted">중심 위도</span><strong>${Number(sector.centerLat).toFixed(6)}</strong></div>
+        <div class="row"><span class="muted">중심 경도</span><strong>${Number(sector.centerLon).toFixed(6)}</strong></div>
+        <div class="row"><span class="muted">KATEC X</span><strong>${Number(sector.katecX).toFixed(1)}</strong></div>
+        <div class="row"><span class="muted">KATEC Y</span><strong>${Number(sector.katecY).toFixed(1)}</strong></div>
+        <div class="row"><span class="muted">호출 반경</span><strong>${Number(sector.radiusMeters).toLocaleString()}m</strong></div>
+        <div class="row"><span class="muted">한 변</span><strong>${Number(sector.sideLengthMeters).toLocaleString()}m</strong></div>
+      </div>
+      <div class="detail-sector-actions">${statusButtons}</div>
+    `;
+
+    detail.querySelectorAll('.detail-sector-actions button').forEach(button => {
+      button.addEventListener('click', () => {
+        setPaintMode(button.dataset.tier);
+        updateSectorStatus(sector.sectorId, button.dataset.tier);
+      });
+    });
+  }
+
+  async function updateSectorStatus(sectorId, syncTier) {
+    try {
+      const updated = await fetchJson(apiUrl(`/sectors/${sectorId}/status?syncTier=${encodeURIComponent(syncTier)}`), {
+        method: 'POST'
+      });
+
+      const index = state.sectors.findIndex(sector => isSameSector(sector.sectorId, updated.sectorId));
+      if (index >= 0) {
+        state.sectors[index] = updated;
+        state.sectorById.set(updated.sectorId, updated);
+      }
+      refreshSectorPath(updated);
+      updateStats();
+      selectSector(updated.sectorId, true);
+    } catch (error) {
+      detail.className = 'panel';
+      detail.textContent = error instanceof Error ? error.message : String(error);
+    }
+  }
+
+  function setPaintMode(mode) {
+    state.paintTier = mode;
+    refreshPaintControls();
+  }
+
+  function refreshPaintControls() {
+    paintModeLabel.textContent = state.paintTier || 'SELECT';
+    paintActions.querySelectorAll('button').forEach(button => {
+      button.classList.toggle('active', button.dataset.tier === state.paintTier);
+    });
+  }
+
+  function refreshSectorPath(sector) {
+    const path = state.pathById.get(sector.sectorId);
+    if (!path) {
+      return;
+    }
+
+    const className = `sector ${getDisplayTier(sector)}${state.selectedId === sector.sectorId ? ' selected' : ''}`;
+    path.setAttribute('class', className);
+  }
+
+  function setZoom(nextZoom) {
+    state.zoom = Math.min(state.maxZoom, Math.max(state.minZoom, nextZoom));
+    applyTransform();
+  }
+
+  function zoomBy(factor) {
+    setZoom(state.zoom * factor);
+  }
+
+  function applyTransform() {
+    mapCanvas.style.transform = `translate(-50%, -50%) scale(${state.zoom.toFixed(3)})`;
+  }
+
+  function onWheel(event) {
+    event.preventDefault();
+    const factor = event.deltaY < 0 ? 1.12 : 1 / 1.12;
+    zoomBy(factor);
+  }
+
+  function centerScrollbars() {
+    const left = Math.max(0, Math.floor((mapStage.scrollWidth - mapShell.clientWidth) / 2));
+    const top = Math.max(0, Math.floor((mapStage.scrollHeight - mapShell.clientHeight) / 2));
+    mapShell.scrollLeft = left;
+    mapShell.scrollTop = top;
+  }
+
+  function ringToPath(ring, close) {
+    return ring.map((coord, index) => {
+      const p = project(coord[1], coord[0]);
+      return `${index === 0 ? 'M' : 'L'}${p.x.toFixed(2)} ${p.y.toFixed(2)}`;
+    }).join(' ') + (close ? ' Z' : '');
+  }
+
+  function project(lat, lon) {
+    const lonSpan = bounds.maxLon - bounds.minLon;
+    const latSpan = bounds.maxLat - bounds.minLat;
+    const scale = Math.min((width - pad * 2) / lonSpan, (height - pad * 2) / latSpan) * 0.99;
+    const horizontalCompress = 0.74;
+    const verticalCompress = 0.91;
+    const rotationDegrees = -0.6;
+    const projectedWidth = lonSpan * scale * horizontalCompress;
+    const projectedHeight = latSpan * scale;
+    const offsetX = (width - projectedWidth) / 2 + 12;
+    const offsetY = (height - projectedHeight) / 2 + 155;
+    const rawX = offsetX + (lon - bounds.minLon) * scale * horizontalCompress;
+    const rawY = offsetY + (bounds.maxLat - lat) * scale * verticalCompress;
+    const angle = rotationDegrees * Math.PI / 180;
+    const centerX = width / 2;
+    const centerY = height / 2;
+    const dx = rawX - centerX;
+    const dy = rawY - centerY;
+    return {
+      x: centerX + (dx * Math.cos(angle) - dy * Math.sin(angle)),
+      y: centerY + (dx * Math.sin(angle) + dy * Math.cos(angle))
+    };
+  }
+
+  function computeBounds(geojson) {
+    const result = {
+      minLat: Infinity,
+      maxLat: -Infinity,
+      minLon: Infinity,
+      maxLon: -Infinity
+    };
+
+    for (const feature of geojson.features || []) {
+      collectGeometryBounds(feature.geometry, result);
+    }
+    return result;
+  }
+
+  function collectGeometryBounds(geometry, result) {
+    if (!geometry) {
+      return;
+    }
+    if (geometry.type === 'Point') {
+      updateBounds(result, geometry.coordinates[1], geometry.coordinates[0]);
+      return;
+    }
+    if (geometry.type === 'LineString' || geometry.type === 'MultiPoint') {
+      for (const coord of geometry.coordinates) {
+        updateBounds(result, coord[1], coord[0]);
+      }
+      return;
+    }
+    if (geometry.type === 'Polygon' || geometry.type === 'MultiLineString') {
+      for (const ring of geometry.coordinates) {
+        for (const coord of ring) {
+          updateBounds(result, coord[1], coord[0]);
+        }
+      }
+      return;
+    }
+    if (geometry.type === 'MultiPolygon') {
+      for (const polygon of geometry.coordinates) {
+        for (const ring of polygon) {
+          for (const coord of ring) {
+            updateBounds(result, coord[1], coord[0]);
+          }
+        }
+      }
+    }
+  }
+
+  function updateBounds(result, lat, lon) {
+    result.minLat = Math.min(result.minLat, lat);
+    result.maxLat = Math.max(result.maxLat, lat);
+    result.minLon = Math.min(result.minLon, lon);
+    result.maxLon = Math.max(result.maxLon, lon);
+  }
+
+  function expandBounds(input, ratio) {
+    const latPad = (input.maxLat - input.minLat) * ratio;
+    const lonPad = (input.maxLon - input.minLon) * ratio;
+    return {
+      minLat: input.minLat - latPad,
+      maxLat: input.maxLat + latPad,
+      minLon: input.minLon - lonPad,
+      maxLon: input.maxLon + lonPad
+    };
+  }
+
+  function startPolling() {
+    if (state.statusPollTimerId === null) {
+      state.statusPollTimerId = window.setInterval(() => {
+        void refreshSyncStatus();
+      }, 60000);
+    }
+
+    if (state.logRefreshTimerId === null) {
+      state.logRefreshTimerId = window.setInterval(() => {
+        void loadRecentLogs();
+      }, 60000);
+    }
+  }
+
+  document.getElementById('reloadButton').addEventListener('click', () => {
+    void loadMap({ preserveSelection: true });
+  });
+
+  document.getElementById('generateButton').addEventListener('click', () => {
+    void generateSectors();
+  });
+
+  document.getElementById('enableAllButton').addEventListener('click', () => {
+    void setAllEnabled(true);
+  });
+
+  document.getElementById('disableAllButton').addEventListener('click', () => {
+    void setAllEnabled(false);
+  });
+
+  document.getElementById('bulkEnableButton').addEventListener('click', () => {
+    void setAllEnabled(true);
+  });
+
+  document.getElementById('bulkDisableButton').addEventListener('click', () => {
+    void setAllEnabled(false);
+  });
+
+  document.getElementById('forceActions').querySelectorAll('button').forEach(button => {
+    button.addEventListener('click', () => {
+      void forceSync(button.dataset.scope, button.textContent.trim());
+    });
+  });
+
+  document.getElementById('zoomInButton').addEventListener('click', () => setZoom(state.zoom + state.zoomStep));
+  document.getElementById('zoomOutButton').addEventListener('click', () => setZoom(state.zoom - state.zoomStep));
+
+  paintActions.querySelectorAll('button').forEach(button => {
+    button.addEventListener('click', () => setPaintMode(button.dataset.tier));
+  });
+
+  mapSvg.addEventListener('wheel', onWheel, { passive: false });
+
+  (async () => {
+    try {
+      const response = await fetch('/assets/geojson/south-korea.geojson');
+      if (response.ok) {
+        const geojson = await response.json();
+        bounds = expandBounds(computeBounds(geojson), 0.04);
+      }
+    } catch (error) {
+      // 지역 경계 파일이 없으면 기본 좌표 범위를 사용합니다.
+    }
+
+    refreshPaintControls();
+    await loadMap();
+    startPolling();
+  })();
+</script>
+</body>
+</html>

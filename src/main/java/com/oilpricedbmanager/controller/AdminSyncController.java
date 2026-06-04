@@ -4,6 +4,7 @@ import com.oilpricedbmanager.domain.ForceSyncScope;
 import com.oilpricedbmanager.domain.FuelType;
 import com.oilpricedbmanager.domain.SyncRequestSource;
 import com.oilpricedbmanager.dto.AdminSyncLogItem;
+import com.oilpricedbmanager.dto.AdminSyncRuntimeStatus;
 import com.oilpricedbmanager.repository.AdminSyncLogRepository;
 import com.oilpricedbmanager.dto.SyncResponse;
 import com.oilpricedbmanager.dto.OpinetSectorSyncReport;
@@ -55,6 +56,11 @@ public class AdminSyncController {
     @GetMapping("/logs/recent")
     public List<AdminSyncLogItem> recentSyncLogs(@RequestParam(defaultValue = "12") int limit) {
         return adminSyncLogRepository.findRecent(limit);
+    }
+
+    @GetMapping("/status")
+    public AdminSyncRuntimeStatus syncStatus() {
+        return opinetSyncService.getRuntimeStatus();
     }
 
     @PostMapping("/sectors/{sectorId}")
