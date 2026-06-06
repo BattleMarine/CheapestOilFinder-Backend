@@ -20,6 +20,7 @@
       --control: #ffffff;
       --control-border: #c6ccd6;
       --shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+      --sidebar-width: 504px;
     }
 
     * {
@@ -114,7 +115,7 @@
 
     main {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) 360px;
+      grid-template-columns: minmax(0, 1fr) var(--sidebar-width);
       height: calc(100vh - 64px);
       overflow: hidden;
       min-height: 0;
@@ -366,6 +367,19 @@
       margin-top: 12px;
     }
 
+    .api-log-header-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .api-log-clear-button {
+      height: 28px;
+      padding: 0 8px;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
     .api-log-list {
       display: flex;
       flex-direction: column;
@@ -603,7 +617,10 @@
     <div class="panel api-log-panel">
       <div class="row">
         <span class="muted">API 호출 로그</span>
-        <strong id="apiLogState">최근 12건</strong>
+        <div class="api-log-header-actions">
+          <strong id="apiLogState">전체 로드 중</strong>
+          <button type="button" id="clearApiLogButton" class="api-log-clear-button">로그 비우기</button>
+        </div>
       </div>
       <div id="apiLogList" class="api-log-list"></div>
     </div>
@@ -660,6 +677,7 @@
   const loadState = document.getElementById('loadState');
   const detail = document.getElementById('detail');
   const apiLogState = document.getElementById('apiLogState');
+  const clearApiLogButton = document.getElementById('clearApiLogButton');
   const apiLogList = document.getElementById('apiLogList');
   const syncStateText = document.getElementById('syncStateText');
   const syncLabelText = document.getElementById('syncLabelText');
@@ -789,9 +807,9 @@
       return;
     }
 
-    apiLogState.textContent = '불러오는 중';
+    apiLogState.textContent = '전체 로드 중';
     try {
-      const logs = await fetchJson(apiUrl('/sync/logs/recent?limit=12'));
+      const logs = await fetchJson(apiUrl('/sync/logs/recent'));
       apiLogList.replaceChildren();
 
       if (!Array.isArray(logs) || logs.length === 0) {
@@ -799,7 +817,7 @@
         empty.className = 'api-log-item muted';
         empty.textContent = '최근 호출 로그가 없습니다.';
         apiLogList.appendChild(empty);
-        apiLogState.textContent = '최근 0건';
+        apiLogState.textContent = '전체 0건';
         return;
       }
 
@@ -807,7 +825,7 @@
         apiLogList.appendChild(renderLogItem(log));
       }
 
-      apiLogState.textContent = `최근 ${logs.length}건`;
+      apiLogState.textContent = `전체 ${logs.length}건`;
     } catch (error) {
       apiLogState.textContent = '로그 불러오기 실패';
       apiLogList.replaceChildren();
@@ -1233,13 +1251,13 @@
     if (state.statusPollTimerId === null) {
       state.statusPollTimerId = window.setInterval(() => {
         void refreshSyncStatus();
-      }, 60000);
+      }, 1000);
     }
 
     if (state.logRefreshTimerId === null) {
       state.logRefreshTimerId = window.setInterval(() => {
         void loadRecentLogs();
-      }, 60000);
+      }, 15000);
     }
   }
 
@@ -1265,6 +1283,24 @@
 
   document.getElementById('bulkDisableButton').addEventListener('click', () => {
     void setAllEnabled(false);
+  });
+
+  clearApiLogButton?.addEventListener('click', () => {
+    clearApiLogButton.disabled = true;
+    apiLogState.textContent = '로그 비우는 중';
+    fetchJson(apiUrl('/sync/logs/clear'), {
+      method: 'POST'
+    }).then(async () => {
+      await loadRecentLogs();
+    }).catch(error => {
+      apiLogState.textContent = '로그 비우기 실패';
+      const item = document.createElement('div');
+      item.className = 'api-log-item';
+      item.textContent = error instanceof Error ? error.message : String(error);
+      apiLogList.replaceChildren(item);
+    }).finally(() => {
+      clearApiLogButton.disabled = false;
+    });
   });
 
   document.getElementById('forceActions').querySelectorAll('button').forEach(button => {

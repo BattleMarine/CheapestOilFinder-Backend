@@ -4,9 +4,11 @@ import com.oilpricedbmanager.domain.ForceSyncScope;
 import com.oilpricedbmanager.domain.FuelType;
 import com.oilpricedbmanager.domain.SyncRequestSource;
 import com.oilpricedbmanager.dto.AdminSyncLogItem;
+import com.oilpricedbmanager.dto.AdminSyncLogClearResponse;
 import com.oilpricedbmanager.dto.AdminSyncRuntimeStatus;
 import com.oilpricedbmanager.dto.SyncResponse;
 import com.oilpricedbmanager.repository.AdminSyncLogRepository;
+import com.oilpricedbmanager.service.AdminSyncLogMaintenanceService;
 import com.oilpricedbmanager.service.OpinetSyncService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,6 +37,9 @@ class AdminSyncControllerTest {
 
     @MockBean
     AdminSyncLogRepository adminSyncLogRepository;
+
+    @MockBean
+    AdminSyncLogMaintenanceService adminSyncLogMaintenanceService;
 
     @Test
     void sync_status_endpoint_returns_runtime_status() throws Exception {
@@ -109,5 +114,51 @@ class AdminSyncControllerTest {
                 .andExpect(jsonPath("$[0].status").value("RUNNING"));
 
         verify(adminSyncLogRepository).findRecent(3);
+    }
+
+    @Test
+    void recent_sync_logs_endpoint_returns_all_logs_when_limit_is_missing() throws Exception {
+        when(adminSyncLogRepository.findRecent(null)).thenReturn(List.of(
+                new AdminSyncLogItem(
+                        "BATCH",
+                        35L,
+                        null,
+                        null,
+                        "FORCE_HOT_ONLY",
+                        null,
+                        null,
+                        "RUNNING",
+                        null,
+                        "진행 중",
+                        "2026-06-02 10:31:20",
+                        null
+                )
+        ));
+
+        mockMvc.perform(get("/api/admin/sync/logs/recent"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].logType").value("BATCH"))
+                .andExpect(jsonPath("$[0].syncType").value("FORCE_HOT_ONLY"));
+
+        verify(adminSyncLogRepository).findRecent(null);
+    }
+
+    @Test
+    void clear_sync_logs_endpoint_archives_and_clears_logs() throws Exception {
+        when(adminSyncLogMaintenanceService.archiveAndClear()).thenReturn(new AdminSyncLogClearResponse(
+                8,
+                2,
+                6,
+                "logs/log_history.csv",
+                "logs/log_history_20260605_153000.csv",
+                "2026-06-05 15:30:00"
+        ));
+
+        mockMvc.perform(post("/api/admin/sync/logs/clear"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalCount").value(8))
+                .andExpect(jsonPath("$.latestBackupFile").value("logs/log_history.csv"));
+
+        verify(adminSyncLogMaintenanceService).archiveAndClear();
     }
 }

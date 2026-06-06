@@ -19,8 +19,8 @@ public class AdminSyncLogRepository {
         this.jdbcTemplate = jdbcTemplate;
     }
 
-    public List<AdminSyncLogItem> findRecent(int limit) {
-        int safeLimit = Math.max(1, Math.min(limit, 100));
+    public List<AdminSyncLogItem> findRecent(Integer limit) {
+        Integer safeLimit = limit == null ? null : Math.max(1, limit);
         String sql = """
                 SELECT log_type,
                        ref_id,
@@ -68,9 +68,26 @@ public class AdminSyncLogRepository {
                     JOIN sync_sector ss ON ss.sector_id = ssl.sector_id
                 ) logs
                 ORDER BY started_at DESC, ref_id DESC
-                LIMIT ?
                 """;
-        return jdbcTemplate.query(sql, (rs, rowNum) -> new AdminSyncLogItem(
+        if (safeLimit == null) {
+            return jdbcTemplate.query(sql, (rs, rowNum) -> new AdminSyncLogItem(
+                rs.getString("log_type"),
+                rs.getLong("ref_id"),
+                rs.getObject("sector_id") == null ? null : rs.getLong("sector_id"),
+                rs.getString("sector_code"),
+                rs.getString("sync_type"),
+                rs.getString("fuel_type"),
+                rs.getString("opinet_prodcd"),
+                rs.getString("status"),
+                rs.getObject("station_count") == null ? null : rs.getInt("station_count"),
+                rs.getString("detail"),
+                formatTimestamp(rs.getTimestamp("started_at")),
+                formatTimestamp(rs.getTimestamp("finished_at"))
+            ));
+        }
+
+        String limitedSql = sql + "\nLIMIT ?";
+        return jdbcTemplate.query(limitedSql, (rs, rowNum) -> new AdminSyncLogItem(
                 rs.getString("log_type"),
                 rs.getLong("ref_id"),
                 rs.getObject("sector_id") == null ? null : rs.getLong("sector_id"),

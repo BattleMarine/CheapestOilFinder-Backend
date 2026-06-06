@@ -3,11 +3,13 @@ package com.oilpricedbmanager.controller;
 import com.oilpricedbmanager.domain.ForceSyncScope;
 import com.oilpricedbmanager.domain.FuelType;
 import com.oilpricedbmanager.domain.SyncRequestSource;
+import com.oilpricedbmanager.dto.AdminSyncLogClearResponse;
 import com.oilpricedbmanager.dto.AdminSyncLogItem;
 import com.oilpricedbmanager.dto.AdminSyncRuntimeStatus;
 import com.oilpricedbmanager.repository.AdminSyncLogRepository;
 import com.oilpricedbmanager.dto.SyncResponse;
 import com.oilpricedbmanager.dto.OpinetSectorSyncReport;
+import com.oilpricedbmanager.service.AdminSyncLogMaintenanceService;
 import com.oilpricedbmanager.service.OpinetSyncService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -23,10 +25,14 @@ import java.util.List;
 public class AdminSyncController {
     private final OpinetSyncService opinetSyncService;
     private final AdminSyncLogRepository adminSyncLogRepository;
+    private final AdminSyncLogMaintenanceService adminSyncLogMaintenanceService;
 
-    public AdminSyncController(OpinetSyncService opinetSyncService, AdminSyncLogRepository adminSyncLogRepository) {
+    public AdminSyncController(OpinetSyncService opinetSyncService,
+                               AdminSyncLogRepository adminSyncLogRepository,
+                               AdminSyncLogMaintenanceService adminSyncLogMaintenanceService) {
         this.opinetSyncService = opinetSyncService;
         this.adminSyncLogRepository = adminSyncLogRepository;
+        this.adminSyncLogMaintenanceService = adminSyncLogMaintenanceService;
     }
 
     @PostMapping("/stations")
@@ -54,8 +60,13 @@ public class AdminSyncController {
     }
 
     @GetMapping("/logs/recent")
-    public List<AdminSyncLogItem> recentSyncLogs(@RequestParam(defaultValue = "12") int limit) {
+    public List<AdminSyncLogItem> recentSyncLogs(@RequestParam(required = false) Integer limit) {
         return adminSyncLogRepository.findRecent(limit);
+    }
+
+    @PostMapping("/logs/clear")
+    public AdminSyncLogClearResponse clearSyncLogs() {
+        return adminSyncLogMaintenanceService.archiveAndClear();
     }
 
     @GetMapping("/status")

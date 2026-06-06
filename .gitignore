@@ -11,6 +11,8 @@ bootrun*.out.log
 bootrun*.err.log
 logs/
 **/logs/
+logs/log_history*.csv
+**/log_history*.csv
 frontend/logs/
 frontend/**/*.log
 docs/BACKEND_API_ACCESS_CLAIM.md
