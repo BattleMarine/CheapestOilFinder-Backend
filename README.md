@@ -296,3 +296,5 @@ Content-Type: application/json
 - 자동완성 DB에는 한국의 대표 시도, 구, 동, 군, 읍, 면, 리와 주요 랜드마크를 `KOREA_SEED`로 미리 넣습니다.
 - 자동완성은 DB 후보를 먼저 보여주고, 사용자가 검색을 확정했을 때만 카카오 Local API를 호출합니다.
 - `KOREA_SEED`는 `gas_station` 동기화와 분리되어 유지됩니다.
+
+- 자동완성 초기 seed에 지하철역 이름(시청역, 삼성역 등)을 추가했습니다.
