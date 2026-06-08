@@ -200,6 +200,13 @@ class OpinetSyncServiceTest {
                     )
             );
 
+            for (int attempt = 0; attempt < 50; attempt++) {
+                if (opinetSyncService.getRuntimeStatus().waitingCount() >= 1) {
+                    break;
+                }
+                Thread.sleep(100);
+            }
+
             allowFirstCallToFinish.countDown();
 
             assertThat(manualFuture.get(5, TimeUnit.SECONDS).status()).isEqualTo("SUCCESS");

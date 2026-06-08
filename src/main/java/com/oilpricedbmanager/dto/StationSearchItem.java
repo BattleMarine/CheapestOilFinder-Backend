@@ -3,12 +3,14 @@ package com.oilpricedbmanager.dto;
 import com.oilpricedbmanager.domain.FuelType;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 public record StationSearchItem(
         String stationId,
         String stationName,
         String brandName,
         String address,
+        String phone,
         double latitude,
         double longitude,
         String coordinateSystem,
@@ -20,6 +22,7 @@ public record StationSearchItem(
         Integer estimatedTravelFuelCostWon,
         Integer estimatedTotalCostWon,
         Integer routeExtraDistanceMeters,
+        List<String> notes,
         LocalDateTime updatedAt
 ) {
 }

@@ -19,7 +19,8 @@ docs/BACKEND_API_ACCESS_CLAIM.md
 docs/archive/BACKEND_API_ACCESS_CLAIM_*.md
 
 # Local secrets. Never commit API keys.
-secrets/
+secrets/*
+!secrets/README.md
 *.secret
 *.key
 .env

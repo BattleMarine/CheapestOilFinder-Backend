@@ -1,8 +1,10 @@
 package com.oilpricedbmanager.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.oilpricedbmanager.domain.FuelType;
 import com.oilpricedbmanager.dto.DistanceBasis;
 import com.oilpricedbmanager.dto.FuelPriceSummary;
+import com.oilpricedbmanager.dto.RouteNavigationResponse;
 import com.oilpricedbmanager.dto.RouteStationSearchRequest;
 import com.oilpricedbmanager.dto.StationDetailResponse;
 import com.oilpricedbmanager.dto.StationSearchItem;
@@ -52,7 +54,7 @@ class StationControllerTest {
                         .param("fuelTypes", "REGULAR_GASOLINE")
                         .param("fuelTypes", "DIESEL")
                         .param("sortOrder", "ESTIMATED_TOTAL_COST_ASC")
-                        .param("referenceLabel", "현재 위치"))
+                        .param("referenceLabel", "Current Location"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.searchMode").value("NEARBY"))
                 .andExpect(jsonPath("$.resultCount").value(1))
@@ -92,8 +94,8 @@ class StationControllerTest {
                 10.0,
                 List.of(),
                 StationSearchSortOrder.DISTANCE_ASC,
-                "출발지",
-                "목적지"
+                "Origin",
+                "Destination"
         );
 
         mockMvc.perform(post("/api/stations/route")
@@ -101,7 +103,8 @@ class StationControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.searchMode").value("ROUTE"))
-                .andExpect(jsonPath("$.stations[0].distanceBasis").value("ROUTE_LINE"));
+                .andExpect(jsonPath("$.stations[0].distanceBasis").value("ROUTE_LINE"))
+                .andExpect(jsonPath("$.route.routeOption").value("traoptimal"));
     }
 
     @Test
@@ -121,8 +124,9 @@ class StationControllerTest {
                 "WGS84",
                 5.0,
                 1,
-                "현재 위치",
-                List.of(sampleStationItem())
+                "Current Location",
+                List.of(sampleStationItem()),
+                null
         );
     }
 
@@ -132,45 +136,58 @@ class StationControllerTest {
                 "WGS84",
                 5.0,
                 1,
-                "출발지 -> 목적지",
+                "Origin -> Destination",
                 List.of(new StationSearchItem(
                         "UNI-001",
-                        "테스트 주유소",
+                        "Test Station",
                         "B027",
-                        "서울특별시 중구",
+                        "Seoul Jung-gu",
+                        "02-1111-2222",
                         37.5665,
                         126.9780,
                         "WGS84",
                         1200,
-                        DistanceBasis.ROUTE_LINE,
-                        new FuelPriceSummary(1550, 1730, 1490, null, LocalDateTime.of(2026, 5, 28, 10, 0)),
-                        com.oilpricedbmanager.domain.FuelType.REGULAR_GASOLINE,
-                        1550,
-                        1860,
-                        33600,
-                        1200,
-                        LocalDateTime.of(2026, 5, 28, 10, 0)
-                ))
+                DistanceBasis.ROUTE_LINE,
+                new FuelPriceSummary(1550, 1730, 1490, null, LocalDateTime.of(2026, 5, 28, 10, 0)),
+                FuelType.REGULAR_GASOLINE,
+                1550,
+                1860,
+                33600,
+                1200,
+                List.of("좌표계: WGS84", "거리 기준: ROUTE_LINE"),
+                LocalDateTime.of(2026, 5, 28, 10, 0)
+        )),
+                new RouteNavigationResponse(
+                        "37.566500,126.978000;37.530000,127.020000;37.500000,127.100000",
+                        12345,
+                        678,
+                        2000,
+                        1500,
+                        "traoptimal",
+                        "2026-05-28T10:00:00"
+                )
         );
     }
 
     private StationSearchItem sampleStationItem() {
         return new StationSearchItem(
                 "UNI-001",
-                "테스트 주유소",
+                "Test Station",
                 "B027",
-                "서울특별시 중구",
+                "Seoul Jung-gu",
+                "02-1111-2222",
                 37.5665,
                 126.9780,
                 "WGS84",
                 750,
                 DistanceBasis.REFERENCE_POINT,
                 new FuelPriceSummary(1550, 1730, 1490, null, LocalDateTime.of(2026, 5, 28, 10, 0)),
-                com.oilpricedbmanager.domain.FuelType.REGULAR_GASOLINE,
+                FuelType.REGULAR_GASOLINE,
                 1550,
                 1163,
                 47663,
                 null,
+                List.of("좌표계: WGS84", "거리 기준: REFERENCE_POINT"),
                 LocalDateTime.of(2026, 5, 28, 10, 0)
         );
     }

@@ -24,3 +24,20 @@ app:
     default-radius-meters: 5000
     default-refuel-liters: 30
     default-fuel-efficiency-km-per-liter: 10
+
+naver:
+  directions:
+    base-url: ${NAVER_DIRECTIONS_BASE_URL:https://maps.apigw.ntruss.com/map-direction/v1}
+    api-key-id: ${NAVER_DIRECTIONS_API_KEY_ID:}
+    api-key: ${NAVER_DIRECTIONS_API_KEY:}
+    api-key-file: ${NAVER_DIRECTIONS_API_KEY_FILE:./secrets/naver_maps_client.txt}
+    enabled: ${NAVER_DIRECTIONS_ENABLED:true}
+
+kakao:
+  local:
+    base-url: ${KAKAO_LOCAL_BASE_URL:https://dapi.kakao.com/v2/local}
+    api-key: ${KAKAO_LOCAL_API_KEY:}
+    api-key-file: ${KAKAO_LOCAL_API_KEY_FILE:./secrets/kakao_local_api.txt}
+    enabled: ${KAKAO_LOCAL_ENABLED:true}
+    autocomplete-limit: ${KAKAO_LOCAL_AUTOCOMPLETE_LIMIT:10}
+    cache-ttl-minutes: ${KAKAO_LOCAL_CACHE_TTL_MINUTES:1440}
