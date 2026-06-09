@@ -18,6 +18,7 @@ public record RouteStationSearchRequest(
         Double fuelEfficiencyKmPerLiter,
         List<FuelType> fuelTypes,
         StationSearchSortOrder sortOrder,
+        RouteResultMode routeResultMode,
         String originLabel,
         String destinationLabel
 ) {
@@ -52,6 +53,10 @@ public record RouteStationSearchRequest(
             ));
         }
         return new ArrayList<>(fuelTypes);
+    }
+
+    public RouteResultMode resolvedRouteResultMode() {
+        return routeResultMode == null ? RouteResultMode.ROUTE_WITH_STATIONS : routeResultMode;
     }
 
     public String resolvedOriginLabel() {

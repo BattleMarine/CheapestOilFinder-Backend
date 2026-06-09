@@ -5,6 +5,7 @@ import com.oilpricedbmanager.domain.FuelType;
 import com.oilpricedbmanager.dto.DistanceBasis;
 import com.oilpricedbmanager.dto.FuelPriceSummary;
 import com.oilpricedbmanager.dto.RouteNavigationResponse;
+import com.oilpricedbmanager.dto.RouteResultMode;
 import com.oilpricedbmanager.dto.RouteStationSearchRequest;
 import com.oilpricedbmanager.dto.StationDetailResponse;
 import com.oilpricedbmanager.dto.StationSearchItem;
@@ -15,8 +16,8 @@ import com.oilpricedbmanager.service.StationSearchService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDateTime;
@@ -94,6 +95,7 @@ class StationControllerTest {
                 10.0,
                 List.of(),
                 StationSearchSortOrder.DISTANCE_ASC,
+                RouteResultMode.ROUTE_WITH_STATIONS,
                 "Origin",
                 "Destination"
         );
@@ -147,16 +149,17 @@ class StationControllerTest {
                         126.9780,
                         "WGS84",
                         1200,
-                DistanceBasis.ROUTE_LINE,
-                new FuelPriceSummary(1550, 1730, 1490, null, LocalDateTime.of(2026, 5, 28, 10, 0)),
-                FuelType.REGULAR_GASOLINE,
-                1550,
-                1860,
-                33600,
-                1200,
-                List.of("좌표계: WGS84", "거리 기준: ROUTE_LINE"),
-                LocalDateTime.of(2026, 5, 28, 10, 0)
-        )),
+                        DistanceBasis.ROUTE_LINE,
+                        new FuelPriceSummary(1550, 1730, 1490, null, LocalDateTime.of(2026, 5, 28, 10, 0)),
+                        FuelType.REGULAR_GASOLINE,
+                        1550,
+                        1860,
+                        33600,
+                        1200,
+                        null,
+                        List.of("coordinateSystem: WGS84", "distanceBasis: ROUTE_LINE"),
+                        LocalDateTime.of(2026, 5, 28, 10, 0)
+                )),
                 new RouteNavigationResponse(
                         "37.566500,126.978000;37.530000,127.020000;37.500000,127.100000",
                         12345,
@@ -187,7 +190,8 @@ class StationControllerTest {
                 1163,
                 47663,
                 null,
-                List.of("좌표계: WGS84", "거리 기준: REFERENCE_POINT"),
+                null,
+                List.of("coordinateSystem: WGS84", "distanceBasis: REFERENCE_POINT"),
                 LocalDateTime.of(2026, 5, 28, 10, 0)
         );
     }

@@ -1,4 +1,4 @@
-﻿# CheapestOilFinder Backend
+# CheapestOilFinder Backend
 
 CheapestOilFinder Backend는 Android 앱이 직접 외부 유가 API를 호출하지 않도록 중간에서 데이터를 수집, 정제, 조회하는 Spring Boot 서버입니다. 오피넷 주유소/유가 데이터, 주유소 검색, 경로 기반 검색, 목적지 검색, 관리자 동기화 화면을 담당하며 데이터는 PostgreSQL/PostGIS에 저장합니다.
 
@@ -59,7 +59,7 @@ docker compose up -d
 ### 주유소 API
 
 - `GET /api/stations/nearby`: 현재 위치 기준 주변 주유소 조회
-- `POST /api/stations/route`: 출발지와 목적지 기준 차량 경로 및 주유소 조회
+- `POST /api/stations/route`: 출발지와 목적지 기준 차량 경로 조회, `routeResultMode`에 따라 경로만 또는 경로 주변 주유소까지 반환
 - `GET /api/stations/{stationId}`: 주유소 코드 기준 상세 정보 조회
 - `GET /api/discounts`: 활성 할인 정보 조회
 
@@ -86,6 +86,23 @@ docker compose up -d
 
 예전의 모호한 `/api/admin/sync/stations`, `/api/admin/sync/fuels` 경로는 사용하지 않습니다. 섹터 기반 동기화는 `/api/admin/sync/sectors/*` 경로로만 다룹니다.
 
+### 경로 API 반환 모드
+
+`POST /api/stations/route` 요청에는 `routeResultMode`를 선택값으로 보낼 수 있습니다.
+
+- `ROUTE_ONLY`: 네이버 Directions 경로만 계산해 `route` 객체를 반환하고, 주유소 DB 조회는 생략합니다.
+- `ROUTE_WITH_STATIONS`: 기본 경로를 계산한 뒤 경로 주변 주유소를 추천해 `stations[]`와 `route`를 반환합니다.
+- 값을 보내지 않으면 기존 호환을 위해 `ROUTE_WITH_STATIONS`로 처리합니다.
+
+`ROUTE_WITH_STATIONS`는 다음 순서로 동작합니다.
+
+1. 기본 현위치-목적지 경로를 네이버 Directions로 계산합니다.
+2. PostGIS로 경로 주변 주유소를 조회하고, `estimatedTotalCostWon`이 낮은 후보 5개와 경로에서 가까운 후보 5개의 합집합을 경유 계산 후보로 고릅니다.
+3. 중복을 제거한 경유 계산 후보에 대해서만 네이버 Directions `waypoints` 경유 경로를 호출합니다.
+4. `경유 경로 거리 - 기본 경로 거리`를 `routeExtraDistanceMeters`로 기록한 뒤, `추가 이동비 + 예상 주유비`로 다시 계산한 `estimatedTotalCostWon`이 낮은 최종 top 5를 반환합니다.
+5. 각 주유소 항목의 `detourRoute`에는 현위치-주유소-목적지 경로 정보가 들어갑니다.
+
+목적지 확정 직후 지도에 경로선만 빠르게 그릴 때는 `ROUTE_ONLY`, 경로 주변 주유소 추천 화면을 구성할 때는 `ROUTE_WITH_STATIONS`를 사용합니다.
 ## 오피넷 동기화 정책
 
 - 기본 유종은 보통휘발유, 고급휘발유, 경유입니다.
@@ -149,3 +166,4 @@ http://localhost:8080/admin/sectors.html
 ```
 
 관리자 페이지는 섹터 목록, 섹터 등급 변경, 수동 재호출, 현재 동기화 상태, 오피넷 호출 로그를 보여줍니다. 상단 상태는 백엔드의 `/api/admin/sync/status` 값을 기준으로 표시합니다.
+

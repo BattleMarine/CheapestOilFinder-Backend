@@ -62,6 +62,41 @@ public class NaverDirectionsClient {
         return parseRouteResponse(response);
     }
 
+
+    public RouteNavigationResponse fetchDrivingRouteViaWaypoint(
+            double startLongitude,
+            double startLatitude,
+            double waypointLongitude,
+            double waypointLatitude,
+            double goalLongitude,
+            double goalLatitude,
+            double mileageKmPerLiter
+    ) {
+        ensureEnabled();
+
+        String response = restClient.get()
+                .uri(uriBuilder -> uriBuilder
+                        .path("/driving")
+                        .queryParam("start", formatCoordinate(startLongitude, startLatitude))
+                        .queryParam("goal", formatCoordinate(goalLongitude, goalLatitude))
+                        .queryParam("waypoints", formatCoordinate(waypointLongitude, waypointLatitude))
+                        .queryParam("option", DEFAULT_ROUTE_OPTION)
+                        .queryParam("cartype", DEFAULT_CAR_TYPE)
+                        .queryParam("fueltype", DEFAULT_FUEL_TYPE)
+                        .queryParam("mileage", formatMileage(mileageKmPerLiter))
+                        .queryParam("lang", "ko")
+                        .build())
+                .header("x-ncp-apigw-api-key-id", properties.resolvedApiKeyId())
+                .header("x-ncp-apigw-api-key", properties.resolvedApiKey())
+                .retrieve()
+                .body(String.class);
+
+        if (response == null || response.isBlank()) {
+            throw new IllegalStateException("Naver Directions returned an empty response.");
+        }
+
+        return parseRouteResponse(response);
+    }
     private RouteNavigationResponse parseRouteResponse(String responseBody) {
         try {
             JsonNode root = objectMapper.readTree(responseBody);
