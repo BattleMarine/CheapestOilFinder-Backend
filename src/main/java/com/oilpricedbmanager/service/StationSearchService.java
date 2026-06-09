@@ -55,16 +55,18 @@ public class StationSearchService {
         double fuelAmountLiters = request.resolvedFuelAmountLiters(properties.defaultRefuelLiters());
         double fuelEfficiency = request.resolvedFuelEfficiency(properties.defaultFuelEfficiencyKmPerLiter());
 
+        List<FuelType> fuelTypes = request.resolvedFuelTypes();
         List<StationSearchItem> stations = stationRepository.findNearbySnapshots(
                         request.latitude(),
                         request.longitude(),
                         radiusMeters,
-                        null
+                        null,
+                        fuelTypes
                 )
                 .stream()
                 .map(snapshot -> mapSnapshot(
                         snapshot,
-                        request.resolvedFuelTypes(),
+                        fuelTypes,
                         fuelAmountLiters,
                         fuelEfficiency,
                         DistanceBasis.REFERENCE_POINT,
@@ -97,16 +99,18 @@ public class StationSearchService {
         String routeWkt = buildRouteWkt(request, routePolyline);
         String referenceLabel = request.resolvedOriginLabel() + " -> " + request.resolvedDestinationLabel();
 
+        List<FuelType> fuelTypes = request.resolvedFuelTypes();
         List<StationSearchItem> stations = stationRepository.findNearbySnapshots(
                         request.originLatitude(),
                         request.originLongitude(),
                         radiusMeters,
-                        routeWkt
+                        routeWkt,
+                        fuelTypes
                 )
                 .stream()
                 .map(snapshot -> mapSnapshot(
                         snapshot,
-                        request.resolvedFuelTypes(),
+                        fuelTypes,
                         fuelAmountLiters,
                         fuelEfficiency,
                         DistanceBasis.ROUTE_LINE,

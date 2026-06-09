@@ -36,22 +36,27 @@ public class ApiExceptionHandler {
 
     private String buildMessage(String detail) {
         if (detail == null || detail.isBlank()) {
-            return "?붿껌 JSON???쎌쓣 ???놁뒿?덈떎. JSON ?뺤떇怨?enum 媛믪쓣 ?ㅼ떆 ?뺤씤??二쇱꽭??";
+            return defaultJsonMessage();
         }
 
         String normalized = detail.toLowerCase();
         if (normalized.contains("unexpected character") || normalized.contains("was expecting double-quote")) {
-            return "?붿껌 蹂몃Ц???щ컮瑜?JSON???꾨떃?덈떎. ?꾨뱶紐낆? ?곕뵲?댄몴濡?媛먯떥怨? PowerShell?먯꽌??curl.exe ?먮뒗 ?щ컮瑜?JSON 臾몄옄?댁쓣 ?ъ슜??二쇱꽭??";
+            return "요청 본문이 올바른 JSON이 아닙니다. 필드명은 큰따옴표로 감싸고, PowerShell에서는 curl.exe 또는 올바른 JSON 문자열을 사용해 주세요.";
         }
 
         if (normalized.contains("stationsearchsortorder") || normalized.contains("cannot deserialize value of type")) {
-            return "sortOrder 媛믪씠 諛깆뿏?쒖? 留욎? ?딆뒿?덈떎. DISTANCE_ASC, CHEAPEST_FUEL_ASC, ESTIMATED_TOTAL_COST_ASC ?먮뒗 ?명솚 蹂꾩묶 PRICE_ASC瑜??ъ슜??二쇱꽭??";
-        }        if (normalized.contains("placesearchmode") || normalized.contains("placesearchsortorder")) {
-            return "目的地 검색 API의 searchMode는 AUTO, KEYWORD, ADDRESS만 사용할 수 있고 sortOrder는 ACCURACY 또는 DISTANCE만 사용할 수 있습니다.";
+            return "sortOrder 값이 백엔드에서 지원하는 형식과 맞지 않습니다. DISTANCE_ASC, CHEAPEST_FUEL_ASC, ESTIMATED_TOTAL_COST_ASC 또는 호환 별칭 PRICE_ASC를 사용해 주세요.";
         }
 
+        if (normalized.contains("placesearchmode") || normalized.contains("placesearchsortorder")) {
+            return "목적지 검색 API의 searchMode는 AUTO, KEYWORD, ADDRESS만 사용할 수 있고 sortOrder는 ACCURACY 또는 DISTANCE만 사용할 수 있습니다.";
+        }
 
-        return "?붿껌 JSON???쎌쓣 ???놁뒿?덈떎. JSON ?뺤떇怨?enum 媛믪쓣 ?ㅼ떆 ?뺤씤??二쇱꽭??";
+        return defaultJsonMessage();
+    }
+
+    private String defaultJsonMessage() {
+        return "요청 JSON을 읽을 수 없습니다. JSON 형식과 enum 값을 다시 확인해 주세요.";
     }
 
     private String extractDetail(HttpMessageNotReadableException exception) {
@@ -62,4 +67,3 @@ public class ApiExceptionHandler {
         return exception.getMessage();
     }
 }
-

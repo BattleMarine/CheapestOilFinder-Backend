@@ -8,8 +8,9 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 import java.sql.Timestamp;
-import java.util.Optional;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public class StationRepository {
@@ -74,7 +75,7 @@ public class StationRepository {
         ));
     }
 
-    public List<StationFuelSnapshot> findNearbySnapshots(double lat, double lon, int radiusMeters, String routeWkt) {
+    public List<StationFuelSnapshot> findNearbySnapshots(double lat, double lon, int radiusMeters, String routeWkt, List<FuelType> fuelTypes) {
         boolean routeSearch = routeWkt != null && !routeWkt.isBlank();
         String distanceExpression = routeSearch
                 ? "ROUND(ST_Distance(gs.geom::geography, ST_SetSRID(ST_GeomFromText(:routeWkt), 4326)::geography))::int"
@@ -82,6 +83,7 @@ public class StationRepository {
         String withinExpression = routeSearch
                 ? "ST_DWithin(gs.geom::geography, ST_SetSRID(ST_GeomFromText(:routeWkt), 4326)::geography, :radiusMeters)"
                 : "ST_DWithin(gs.geom::geography, ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography, :radiusMeters)";
+        String fuelAvailabilityCondition = fuelAvailabilityCondition(fuelTypes);
 
         String sql = """
                 SELECT
@@ -101,10 +103,9 @@ public class StationRepository {
                 FROM gas_station gs
                 JOIN fuel f ON gs.uni_id = f.uni_id
                 WHERE (%s)
-                  AND (f.gas_hign IS NOT NULL OR f.gas_low IS NOT NULL OR f.disl IS NOT NULL OR f.lpg IS NOT NULL)
+                  AND (%s)
                 ORDER BY distance_meters ASC, gs.uni_id ASC
-                LIMIT 200
-                """.formatted(distanceExpression, withinExpression);
+                """.formatted(distanceExpression, withinExpression, fuelAvailabilityCondition);
 
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("lat", lat)
@@ -127,6 +128,26 @@ public class StationRepository {
                 rs.getInt("distance_meters"),
                 rs.getObject("fuel_updated_at", Timestamp.class).toLocalDateTime()
         ));
+    }
+
+    private String fuelAvailabilityCondition(List<FuelType> fuelTypes) {
+        var conditions = new ArrayList<String>();
+        List<FuelType> effectiveFuelTypes = fuelTypes == null || fuelTypes.isEmpty()
+                ? List.of(FuelType.REGULAR_GASOLINE, FuelType.PREMIUM_GASOLINE, FuelType.DIESEL, FuelType.LPG)
+                : fuelTypes;
+
+        for (FuelType fuelType : effectiveFuelTypes) {
+            String condition = switch (fuelType) {
+                case REGULAR_GASOLINE -> "f.gas_low IS NOT NULL";
+                case PREMIUM_GASOLINE -> "f.gas_hign IS NOT NULL";
+                case DIESEL -> "f.disl IS NOT NULL";
+                case LPG -> "f.lpg IS NOT NULL";
+            };
+            if (!conditions.contains(condition)) {
+                conditions.add(condition);
+            }
+        }
+        return String.join(" OR ", conditions);
     }
 
     public Optional<StationFuelSnapshot> findSnapshotById(String stationId) {

@@ -90,40 +90,6 @@ public class OpinetSyncService {
         this.callPauseStrategy = callPauseStrategy;
     }
 
-    public SyncResponse syncStations() {
-        return syncDueSectors(10, SyncRequestSource.MANUAL);
-    }
-
-    public SyncResponse syncFuels() {
-        return syncDueSectors(10, SyncRequestSource.MANUAL);
-    }
-
-    public SyncResponse syncDueSectors(int sectorLimit) {
-        return runSync("DUE_SECTORS", () -> {
-            List<SyncSector> sectors = syncSectorRepository.findAutoDueSectors(sectorLimit);
-            BatchSyncResult result = processBatch("자동 동기화", sectors, DEFAULT_FUEL_TYPES, false);
-            if (!result.success()) {
-                throw new IllegalStateException(result.summary());
-            }
-            return result.summary();
-        });
-    }
-
-    public SyncResponse forceSync(ForceSyncScope scope) {
-        return forceSync(scope, DEFAULT_FUEL_TYPES);
-    }
-
-    public SyncResponse forceSync(ForceSyncScope scope, List<FuelType> fuelTypes) {
-        return runSync(scope.syncType(), () -> {
-            List<SyncSector> sectors = syncSectorRepository.findEnabledSectorsByTiers(scope.tiers());
-            BatchSyncResult result = processBatch(scope.displayName(), sectors, normalizeFuelTypes(fuelTypes), false);
-            if (!result.success()) {
-                throw new IllegalStateException(result.summary());
-            }
-            return result.summary();
-        });
-    }
-
     public SyncResponse syncDueSectors(int sectorLimit, SyncRequestSource source) {
         SyncRequestSource effectiveSource = source == null ? SyncRequestSource.MANUAL : source;
         return submitQueuedBatch(

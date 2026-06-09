@@ -35,16 +35,6 @@ public class AdminSyncController {
         this.adminSyncLogMaintenanceService = adminSyncLogMaintenanceService;
     }
 
-    @PostMapping("/stations")
-    public SyncResponse syncStations() {
-        return opinetSyncService.syncStations();
-    }
-
-    @PostMapping("/fuels")
-    public SyncResponse syncFuels() {
-        return opinetSyncService.syncFuels();
-    }
-
     @PostMapping("/sectors/due")
     public SyncResponse syncDueSectors(@RequestParam(defaultValue = "10") int limit) {
         return opinetSyncService.syncDueSectors(limit, SyncRequestSource.MANUAL);

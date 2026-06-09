@@ -21,6 +21,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -57,7 +58,7 @@ class StationSearchServiceTest {
                 LocalDateTime.of(2026, 5, 28, 10, 0)
         );
 
-        when(stationRepository.findNearbySnapshots(anyDouble(), anyDouble(), anyInt(), anyString()))
+        when(stationRepository.findNearbySnapshots(anyDouble(), anyDouble(), anyInt(), anyString(), anyList()))
                 .thenReturn(List.of(snapshot));
         when(naverDirectionsClient.fetchDrivingRoute(
                 anyDouble(),
@@ -98,7 +99,8 @@ class StationSearchServiceTest {
                 anyDouble(),
                 anyDouble(),
                 anyInt(),
-                routeWktCaptor.capture()
+                routeWktCaptor.capture(),
+                anyList()
         );
         verify(naverDirectionsClient).fetchDrivingRoute(
                 anyDouble(),
