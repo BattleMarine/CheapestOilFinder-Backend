@@ -166,4 +166,18 @@ http://localhost:8080/admin/sectors.html
 ```
 
 관리자 페이지는 섹터 목록, 섹터 등급 변경, 수동 재호출, 현재 동기화 상태, 오피넷 호출 로그를 보여줍니다. 상단 상태는 백엔드의 `/api/admin/sync/status` 값을 기준으로 표시합니다.
+## 유가 CSV 업로드 관리자 페이지
 
+현재 판매가격 CSV 파일을 이용해 `fuel` 테이블을 수동 업데이트할 수 있습니다.
+
+```text
+http://localhost:8080/admin/fuel-price-upload.html
+```
+
+- 허니콤 맵 관리자 페이지(`/admin/sectors.html`)와 서로 이동할 수 있습니다.
+- 업로드 API는 `POST /api/admin/import/fuel-prices`이며, `multipart/form-data`의 `file` 필드로 CSV를 받습니다.
+- CSV 컬럼 중 `고유번호`, `고급휘발유`, `휘발유`, `경유`를 사용합니다.
+- `고급휘발유`는 `fuel.gas_hign`, `휘발유`는 `fuel.gas_low`, `경유`는 `fuel.disl`에 반영합니다.
+- CSV 가격이 `0`이거나 비어 있으면 해당 유종 가격은 `NULL`로 저장합니다.
+- CSV 업로드는 `gas_station`의 주소, 전화번호, 좌표를 수정하지 않습니다.
+- DB의 `gas_station`에 없는 고유번호는 FK 보호를 위해 건너뛰고, 결과 화면에 일부 목록을 표시합니다.

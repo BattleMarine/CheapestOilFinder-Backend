@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>유가 CSV 업로드</title>
+  <style>
+    :root {
+      --bg: #f5f6f8;
+      --panel: #ffffff;
+      --text: #20242b;
+      --muted: #667085;
+      --line: #d8dde5;
+      --accent: #20242b;
+      --ok: #15803d;
+      --warn: #b45309;
+      --danger: #b91c1c;
+      --shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    header { min-height: 64px; padding: 12px 18px; background: var(--panel); border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 16px; box-shadow: 0 1px 8px rgba(15, 23, 42, 0.04); }
+    h1 { margin: 0; font-size: 20px; letter-spacing: 0; }
+    .subtitle { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+    .toolbar { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+    button, .nav-button { min-height: 36px; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--text); padding: 0 12px; font-weight: 700; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; white-space: nowrap; }
+    button:hover, .nav-button:hover { background: #f0f2f5; }
+    button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    button.primary:disabled, button:disabled { cursor: not-allowed; opacity: 0.55; }
+    main { width: min(1120px, calc(100% - 32px)); margin: 24px auto; display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; }
+    .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); padding: 18px; }
+    .panel + .panel { margin-top: 16px; }
+    .panel-title { margin: 0 0 14px; font-size: 16px; }
+    .drop-zone { border: 1px dashed #a7b0bf; border-radius: 8px; padding: 30px; background: #fbfcfe; display: grid; place-items: center; gap: 12px; text-align: center; }
+    .drop-zone.dragover { border-color: var(--accent); background: #eef2f6; }
+    input[type="file"] { max-width: 100%; }
+    .meta-grid, .result-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .meta-item, .result-item { border: 1px solid var(--line); border-radius: 8px; padding: 12px; background: #fff; min-width: 0; }
+    .meta-item span, .result-item span { display: block; color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+    .meta-item strong, .result-item strong { display: block; overflow-wrap: anywhere; font-size: 15px; }
+    .process-list, .warning-list { display: grid; gap: 8px; margin-top: 12px; }
+    .process-item, .warning-item { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px; background: #fff; font-size: 14px; }
+    .badge { min-width: 64px; text-align: center; padding: 4px 8px; border-radius: 999px; font-size: 12px; font-weight: 800; background: #edf0f4; color: var(--muted); }
+    .badge.ready { background: #ecfdf3; color: var(--ok); }
+    .badge.running { background: #fff7ed; color: var(--warn); }
+    .badge.failed { background: #fef2f2; color: var(--danger); }
+    .summary-text { margin: 0; color: var(--muted); line-height: 1.55; font-size: 14px; }
+    .side-panel { align-self: start; position: sticky; top: 16px; }
+    .missing-list { max-height: 240px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; padding: 10px; background: #fff; color: var(--muted); font-family: Consolas, "SFMono-Regular", monospace; font-size: 12px; white-space: pre-wrap; }
+    @media (max-width: 900px) { header { align-items: flex-start; flex-direction: column; } .toolbar { justify-content: flex-start; } main { grid-template-columns: 1fr; } .side-panel { position: static; } }
+  </style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>유가 CSV 업로드</h1>
+    <p class="subtitle">현재 판매가격 CSV로 DB의 유가 테이블을 업데이트합니다.</p>
+  </div>
+  <div class="toolbar">
+    <a class="nav-button" href="/admin/sectors.html">허니콤 맵</a>
+    <button type="button" id="resetButton">초기화</button>
+  </div>
+</header>
+<main>
+  <section>
+    <div class="panel">
+      <h2 class="panel-title">CSV 파일</h2>
+      <div class="drop-zone" id="dropZone">
+        <input id="fileInput" type="file" accept=".csv,text/csv">
+        <strong id="fileState">파일을 선택해 주세요</strong>
+      </div>
+    </div>
+    <div class="panel">
+      <h2 class="panel-title">파일 정보</h2>
+      <div class="meta-grid">
+        <div class="meta-item"><span>파일명</span><strong id="fileName">-</strong></div>
+        <div class="meta-item"><span>용량</span><strong id="fileSize">-</strong></div>
+        <div class="meta-item"><span>수정일</span><strong id="fileModifiedAt">-</strong></div>
+        <div class="meta-item"><span>선택 시각</span><strong id="selectedAt">-</strong></div>
+      </div>
+    </div>
+    <div class="panel">
+      <h2 class="panel-title">DB 업데이트</h2>
+      <p class="summary-text" id="uploadSummary">CSV를 선택하면 업데이트 버튼이 활성화됩니다.</p>
+      <div style="margin-top:14px; display:flex; gap:8px; flex-wrap:wrap;">
+        <button type="button" class="primary" id="uploadButton" disabled>DB에 업데이트</button>
+      </div>
+      <div class="process-list" id="processList"></div>
+    </div>
+    <div class="panel" id="resultPanel" hidden>
+      <h2 class="panel-title">업데이트 결과</h2>
+      <div class="result-grid">
+        <div class="result-item"><span>전체 CSV 행</span><strong id="totalRows">-</strong></div>
+        <div class="result-item"><span>파싱된 고유번호</span><strong id="parsedRows">-</strong></div>
+        <div class="result-item"><span>기존 행 업데이트</span><strong id="updatedRows">-</strong></div>
+        <div class="result-item"><span>신규 유가 행 생성</span><strong id="insertedRows">-</strong></div>
+        <div class="result-item"><span>DB에 없는 주유소</span><strong id="missingRows">-</strong></div>
+        <div class="result-item"><span>무시된 잘못된 행</span><strong id="invalidRows">-</strong></div>
+        <div class="result-item"><span>NULL 처리 가격 셀</span><strong id="zeroCells">-</strong></div>
+        <div class="result-item"><span>업로드 처리 시각</span><strong id="uploadedAt">-</strong></div>
+      </div>
+    </div>
+  </section>
+  <aside class="side-panel">
+    <div class="panel">
+      <h2 class="panel-title">처리 기준</h2>
+      <p class="summary-text">고급휘발유, 휘발유, 경유만 반영하고 0원 또는 빈 가격은 NULL로 저장합니다. CSV 업로드는 주유소 주소와 좌표를 수정하지 않습니다.</p>
+    </div>
+    <div class="panel" id="missingPanel" hidden>
+      <h2 class="panel-title">DB에 없는 고유번호</h2>
+      <div class="missing-list" id="missingList"></div>
+    </div>
+    <div class="panel" id="warningPanel" hidden>
+      <h2 class="panel-title">주의 로그</h2>
+      <div class="warning-list" id="warningList"></div>
+    </div>
+  </aside>
+</main>
+<script>
+  const fileInput = document.getElementById('fileInput');
+  const dropZone = document.getElementById('dropZone');
+  const fileState = document.getElementById('fileState');
+  const uploadButton = document.getElementById('uploadButton');
+  const resetButton = document.getElementById('resetButton');
+  const uploadSummary = document.getElementById('uploadSummary');
+  const processList = document.getElementById('processList');
+  const resultPanel = document.getElementById('resultPanel');
+  const missingPanel = document.getElementById('missingPanel');
+  const missingList = document.getElementById('missingList');
+  const warningPanel = document.getElementById('warningPanel');
+  const warningList = document.getElementById('warningList');
+  const meta = { fileName: document.getElementById('fileName'), fileSize: document.getElementById('fileSize'), fileModifiedAt: document.getElementById('fileModifiedAt'), selectedAt: document.getElementById('selectedAt') };
+  const result = { totalRows: document.getElementById('totalRows'), parsedRows: document.getElementById('parsedRows'), updatedRows: document.getElementById('updatedRows'), insertedRows: document.getElementById('insertedRows'), missingRows: document.getElementById('missingRows'), invalidRows: document.getElementById('invalidRows'), zeroCells: document.getElementById('zeroCells'), uploadedAt: document.getElementById('uploadedAt') };
+  const processSteps = [{ key: 'select', label: 'CSV 선택' }, { key: 'upload', label: '파일 업로드' }, { key: 'update', label: 'DB 업데이트' }, { key: 'done', label: '결과 반영' }];
+  let selectedFile = null;
+  function formatBytes(bytes) { if (!Number.isFinite(bytes)) return '-'; const units = ['B', 'KB', 'MB', 'GB']; let value = bytes; let unitIndex = 0; while (value >= 1024 && unitIndex < units.length - 1) { value /= 1024; unitIndex++; } return `${value.toFixed(value >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`; }
+  function formatDate(value) { if (!value) return '-'; return new Intl.DateTimeFormat('ko-KR', { dateStyle: 'medium', timeStyle: 'medium' }).format(new Date(value)); }
+  function renderSteps(activeKey, failedKey) { processList.replaceChildren(...processSteps.map(step => { const item = document.createElement('div'); item.className = 'process-item'; const label = document.createElement('span'); label.textContent = step.label; const badge = document.createElement('span'); badge.className = 'badge'; if (failedKey === step.key) { badge.classList.add('failed'); badge.textContent = '실패'; } else if (activeKey === step.key) { badge.classList.add('running'); badge.textContent = '진행 중'; } else if (isStepDone(step.key, activeKey)) { badge.classList.add('ready'); badge.textContent = '완료'; } else { badge.textContent = '대기'; } item.append(label, badge); return item; })); }
+  function isStepDone(stepKey, activeKey) { const stepIndex = processSteps.findIndex(step => step.key === stepKey); const activeIndex = processSteps.findIndex(step => step.key === activeKey); return activeIndex > stepIndex || activeKey === 'complete'; }
+  function resetView() { selectedFile = null; fileInput.value = ''; uploadButton.disabled = true; fileState.textContent = '파일을 선택해 주세요'; uploadSummary.textContent = 'CSV를 선택하면 업데이트 버튼이 활성화됩니다.'; Object.values(meta).forEach(element => element.textContent = '-'); Object.values(result).forEach(element => element.textContent = '-'); processList.replaceChildren(); resultPanel.hidden = true; missingPanel.hidden = true; warningPanel.hidden = true; missingList.textContent = ''; warningList.replaceChildren(); }
+  function setFile(file) { selectedFile = file; fileState.textContent = file ? '선택 완료' : '파일을 선택해 주세요'; uploadButton.disabled = !file; resultPanel.hidden = true; missingPanel.hidden = true; warningPanel.hidden = true; if (!file) return; meta.fileName.textContent = file.name; meta.fileSize.textContent = formatBytes(file.size); meta.fileModifiedAt.textContent = formatDate(file.lastModified); meta.selectedAt.textContent = formatDate(Date.now()); uploadSummary.textContent = `${file.name} 파일을 DB 업데이트 대기 상태로 준비했습니다.`; renderSteps('select'); }
+  async function uploadCsv() { if (!selectedFile) return; uploadButton.disabled = true; uploadSummary.textContent = 'CSV 파일을 서버로 업로드하고 있습니다.'; renderSteps('upload'); const formData = new FormData(); formData.append('file', selectedFile); try { await new Promise(resolve => setTimeout(resolve, 120)); uploadSummary.textContent = '서버에서 CSV를 파싱하고 DB에 반영하고 있습니다.'; renderSteps('update'); const response = await fetch('/api/admin/import/fuel-prices', { method: 'POST', body: formData }); const body = await response.json().catch(() => ({})); if (!response.ok) throw new Error(body.message || `업로드 실패: HTTP ${response.status}`); renderResult(body); uploadSummary.textContent = `업데이트 완료: ${Number(body.updatedRows || 0).toLocaleString()}건 업데이트, ${Number(body.insertedRows || 0).toLocaleString()}건 생성`; renderSteps('complete'); } catch (error) { uploadSummary.textContent = error instanceof Error ? error.message : String(error); renderSteps(null, 'update'); } finally { uploadButton.disabled = !selectedFile; } }
+  function renderResult(body) { resultPanel.hidden = false; result.totalRows.textContent = Number(body.totalRows || 0).toLocaleString(); result.parsedRows.textContent = Number(body.parsedRows || 0).toLocaleString(); result.updatedRows.textContent = Number(body.updatedRows || 0).toLocaleString(); result.insertedRows.textContent = Number(body.insertedRows || 0).toLocaleString(); result.missingRows.textContent = Number(body.skippedMissingStationRows || 0).toLocaleString(); result.invalidRows.textContent = Number(body.invalidRows || 0).toLocaleString(); result.zeroCells.textContent = Number(body.zeroOrBlankPriceCells || 0).toLocaleString(); result.uploadedAt.textContent = formatDate(body.uploadedAt); const missingIds = Array.isArray(body.missingStationIds) ? body.missingStationIds : []; missingPanel.hidden = missingIds.length === 0; missingList.textContent = missingIds.join('\n'); const warnings = Array.isArray(body.warnings) ? body.warnings : []; warningPanel.hidden = warnings.length === 0; warningList.replaceChildren(...warnings.map(text => { const item = document.createElement('div'); item.className = 'warning-item'; item.textContent = text; return item; })); }
+  fileInput.addEventListener('change', () => setFile(fileInput.files && fileInput.files[0] ? fileInput.files[0] : null));
+  uploadButton.addEventListener('click', () => { void uploadCsv(); });
+  resetButton.addEventListener('click', resetView);
+  ['dragenter', 'dragover'].forEach(eventName => { dropZone.addEventListener(eventName, event => { event.preventDefault(); dropZone.classList.add('dragover'); }); });
+  ['dragleave', 'drop'].forEach(eventName => { dropZone.addEventListener(eventName, event => { event.preventDefault(); dropZone.classList.remove('dragover'); }); });
+  dropZone.addEventListener('drop', event => { const file = event.dataTransfer.files && event.dataTransfer.files[0] ? event.dataTransfer.files[0] : null; if (!file) return; fileInput.files = event.dataTransfer.files; setFile(file); });
+</script>
+</body>
+</html>
