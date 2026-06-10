@@ -6,9 +6,10 @@ import com.oilpricedbmanager.domain.StationFuelSnapshot;
 import com.oilpricedbmanager.dto.DistanceBasis;
 import com.oilpricedbmanager.dto.FuelPriceSummary;
 import com.oilpricedbmanager.dto.NearbyStationSearchRequest;
+import com.oilpricedbmanager.dto.RouteEndpointResponse;
 import com.oilpricedbmanager.dto.RouteNavigationResponse;
-import com.oilpricedbmanager.dto.RouteStationSearchRequest;
 import com.oilpricedbmanager.dto.RouteResultMode;
+import com.oilpricedbmanager.dto.RouteStationSearchRequest;
 import com.oilpricedbmanager.dto.StationDetailResponse;
 import com.oilpricedbmanager.dto.StationSearchItem;
 import com.oilpricedbmanager.dto.StationSearchMode;
@@ -18,14 +19,14 @@ import com.oilpricedbmanager.external.naver.NaverDirectionsClient;
 import com.oilpricedbmanager.repository.StationRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
-import org.springframework.http.HttpStatus;
 
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.List;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -33,9 +34,17 @@ import java.util.stream.Collectors;
 @Service
 public class StationSearchService {
     private static final String COORDINATE_SYSTEM = "WGS84";
+    private static final String ROUTE_STATUS_OK = "OK";
+    private static final String ROUTE_STATUS_SNAPPED = "SNAPPED_TO_NEAREST_ROAD";
+    private static final String ROUTE_STATUS_UNAVAILABLE = "ROUTE_UNAVAILABLE";
     private static final int ROUTE_RESULT_LIMIT = 5;
     private static final int ROUTE_COST_CANDIDATE_LIMIT = 5;
     private static final int ROUTE_DISTANCE_CANDIDATE_LIMIT = 5;
+    private static final int[] SNAP_RADII_METERS = {100, 200, 300, 500, 800, 1200};
+    private static final double[][] SNAP_DIRECTIONS = {
+            {1.0, 0.0}, {-1.0, 0.0}, {0.0, 1.0}, {0.0, -1.0},
+            {0.7071, 0.7071}, {0.7071, -0.7071}, {-0.7071, 0.7071}, {-0.7071, -0.7071}
+    };
     private static final Logger log = LoggerFactory.getLogger(StationSearchService.class);
 
     private final StationRepository stationRepository;
@@ -81,7 +90,6 @@ public class StationSearchService {
                 .sorted(sortComparator(request.resolvedSortOrder()))
                 .collect(Collectors.toList());
 
-
         return new StationSearchResponse(
                 StationSearchMode.NEARBY,
                 COORDINATE_SYSTEM,
@@ -97,7 +105,8 @@ public class StationSearchService {
         int radiusMeters = request.resolvedRadiusMeters(properties.defaultRadiusMeters());
         double fuelAmountLiters = request.resolvedFuelAmountLiters(properties.defaultRefuelLiters());
         double fuelEfficiency = request.resolvedFuelEfficiency(properties.defaultFuelEfficiencyKmPerLiter());
-        RouteNavigationResponse routeNavigation = resolveRouteNavigation(request, fuelEfficiency);
+        RouteResolution routeResolution = resolveRouteNavigation(request, fuelEfficiency);
+        RouteNavigationResponse routeNavigation = routeResolution.routeNavigation();
         String routePolyline = routeNavigation != null && routeNavigation.routePolyline() != null
                 && !routeNavigation.routePolyline().isBlank()
                 ? routeNavigation.routePolyline()
@@ -112,11 +121,21 @@ public class StationSearchService {
                     0,
                     referenceLabel,
                     List.of(),
-                    routeNavigation
+                    routeNavigation,
+                    routeResolution.routeStatus(),
+                    routeResolution.routeMessage(),
+                    routeResolution.originalDestination(),
+                    routeResolution.routeDestination(),
+                    routeResolution.accessDistanceMeters()
             );
         }
 
-        String routeWkt = buildRouteWkt(request, routePolyline);
+        String routeWkt = buildRouteWkt(
+                request,
+                routePolyline,
+                routeResolution.routeDestination().latitude(),
+                routeResolution.routeDestination().longitude()
+        );
         List<FuelType> fuelTypes = request.resolvedFuelTypes();
         List<StationSearchItem> routeCandidates = stationRepository.findNearbySnapshots(
                         request.originLatitude(),
@@ -139,7 +158,7 @@ public class StationSearchService {
 
         List<StationSearchItem> stations = selectRouteCandidates(routeCandidates)
                 .stream()
-                .map(station -> attachDetourRoute(station, request, routeNavigation, fuelEfficiency, fuelAmountLiters))
+                .map(station -> attachDetourRoute(station, request, routeResolution, fuelEfficiency, fuelAmountLiters))
                 .sorted(routeRecommendationComparator())
                 .limit(ROUTE_RESULT_LIMIT)
                 .collect(Collectors.toList());
@@ -151,7 +170,12 @@ public class StationSearchService {
                 stations.size(),
                 referenceLabel,
                 stations,
-                routeNavigation
+                routeNavigation,
+                routeResolution.routeStatus(),
+                routeResolution.routeMessage(),
+                routeResolution.originalDestination(),
+                routeResolution.routeDestination(),
+                routeResolution.accessDistanceMeters()
         );
     }
 
@@ -233,8 +257,6 @@ public class StationSearchService {
         ));
     }
 
-
-
     private List<StationSearchItem> selectRouteCandidates(List<StationSearchItem> stations) {
         var selected = new LinkedHashMap<String, StationSearchItem>();
 
@@ -261,6 +283,7 @@ public class StationSearchService {
                 .thenComparingLong(this::routeApproximationScore)
                 .thenComparing(StationSearchItem::stationName);
     }
+
     private long routeApproximationScore(StationSearchItem station) {
         int fuelPriceWon = station.cheapestFuelPriceWon() == null ? Integer.MAX_VALUE : station.cheapestFuelPriceWon();
         return (long) station.distanceMeters() * fuelPriceWon;
@@ -269,10 +292,11 @@ public class StationSearchService {
     private StationSearchItem attachDetourRoute(
             StationSearchItem station,
             RouteStationSearchRequest request,
-            RouteNavigationResponse baseRoute,
+            RouteResolution routeResolution,
             double fuelEfficiencyKmPerLiter,
             double fuelAmountLiters
     ) {
+        RouteNavigationResponse baseRoute = routeResolution.routeNavigation();
         if (baseRoute == null) {
             return station;
         }
@@ -283,8 +307,8 @@ public class StationSearchService {
                     request.originLatitude(),
                     station.longitude(),
                     station.latitude(),
-                    request.destinationLongitude(),
-                    request.destinationLatitude(),
+                    routeResolution.routeDestination().longitude(),
+                    routeResolution.routeDestination().latitude(),
                     fuelEfficiencyKmPerLiter
             );
             int extraDistanceMeters = Math.max(0, detourRoute.distanceMeters() - baseRoute.distanceMeters());
@@ -307,8 +331,8 @@ public class StationSearchService {
                     request.originLongitude(),
                     station.latitude(),
                     station.longitude(),
-                    request.destinationLatitude(),
-                    request.destinationLongitude(),
+                    routeResolution.routeDestination().latitude(),
+                    routeResolution.routeDestination().longitude(),
                     exception
             );
             return station;
@@ -348,39 +372,46 @@ public class StationSearchService {
     private List<String> buildDetourNotes(List<String> notes, Integer routeExtraDistanceMeters) {
         var updatedNotes = new ArrayList<>(notes == null ? List.of() : notes);
         if (routeExtraDistanceMeters != null) {
-            updatedNotes.add("경유 시 추가 이동거리: " + routeExtraDistanceMeters + "m");
+            updatedNotes.add("detour extra distance: " + routeExtraDistanceMeters + "m");
         }
         return updatedNotes;
     }
+
     private List<String> buildNotes(
             StationFuelSnapshot snapshot,
             DistanceBasis distanceBasis,
             Integer routeExtraDistanceMeters
     ) {
         var notes = new ArrayList<String>();
-        notes.add("좌표계: " + COORDINATE_SYSTEM);
-        notes.add("거리 기준: " + distanceBasis.name());
+        notes.add("coordinate system: " + COORDINATE_SYSTEM);
+        notes.add("distance basis: " + distanceBasis.name());
         if (snapshot.fuelUpdatedAt() != null) {
-            notes.add("유가 최신 시각: " + snapshot.fuelUpdatedAt());
+            notes.add("fuel updated at: " + snapshot.fuelUpdatedAt());
         }
         if (routeExtraDistanceMeters != null) {
-            notes.add("경로 추가거리: " + routeExtraDistanceMeters + "m");
+            notes.add("route extra distance: " + routeExtraDistanceMeters + "m");
         }
         if (snapshot.phone() != null && !snapshot.phone().isBlank()) {
-            notes.add("전화번호 등록됨");
+            notes.add("phone registered");
         }
         return notes;
     }
 
-    private RouteNavigationResponse resolveRouteNavigation(RouteStationSearchRequest request, double fuelEfficiencyKmPerLiter) {
+    private RouteResolution resolveRouteNavigation(RouteStationSearchRequest request, double fuelEfficiencyKmPerLiter) {
+        RouteEndpointResponse originalDestination = destinationEndpoint(
+                request.destinationLatitude(),
+                request.destinationLongitude(),
+                request.resolvedDestinationLabel()
+        );
         try {
-            return naverDirectionsClient.fetchDrivingRoute(
+            RouteNavigationResponse route = naverDirectionsClient.fetchDrivingRoute(
                     request.originLongitude(),
                     request.originLatitude(),
                     request.destinationLongitude(),
                     request.destinationLatitude(),
                     fuelEfficiencyKmPerLiter
             );
+            return RouteResolution.ok(route, originalDestination);
         } catch (RuntimeException exception) {
             log.warn(
                     "Naver Directions route lookup failed. origin=({}, {}), destination=({}, {})",
@@ -390,8 +421,98 @@ public class StationSearchService {
                     request.destinationLongitude(),
                     exception
             );
-            return null;
+            return resolveSnappedRouteNavigation(request, fuelEfficiencyKmPerLiter, originalDestination, exception);
         }
+    }
+
+    private RouteResolution resolveSnappedRouteNavigation(
+            RouteStationSearchRequest request,
+            double fuelEfficiencyKmPerLiter,
+            RouteEndpointResponse originalDestination,
+            RuntimeException originalException
+    ) {
+        for (RouteDestinationCandidate candidate : destinationCandidates(originalDestination.latitude(), originalDestination.longitude())) {
+            try {
+                RouteNavigationResponse route = naverDirectionsClient.fetchDrivingRoute(
+                        request.originLongitude(),
+                        request.originLatitude(),
+                        candidate.longitude(),
+                        candidate.latitude(),
+                        fuelEfficiencyKmPerLiter
+                );
+                RouteEndpointResponse routeDestination = destinationEndpoint(
+                        candidate.latitude(),
+                        candidate.longitude(),
+                        originalDestination.label()
+                );
+                log.info(
+                        "Naver Directions destination snapped. original=({}, {}), snapped=({}, {}), accessDistanceMeters={}",
+                        originalDestination.latitude(),
+                        originalDestination.longitude(),
+                        routeDestination.latitude(),
+                        routeDestination.longitude(),
+                        candidate.distanceMeters()
+                );
+                return RouteResolution.snapped(route, originalDestination, routeDestination, candidate.distanceMeters());
+            } catch (RuntimeException exception) {
+                log.debug(
+                        "Naver Directions snapped route candidate failed. candidate=({}, {}), distanceMeters={}",
+                        candidate.latitude(),
+                        candidate.longitude(),
+                        candidate.distanceMeters(),
+                        exception
+                );
+            }
+        }
+
+        String message = originalException.getMessage() == null
+                ? "Route lookup failed. No drivable nearby destination was found."
+                : originalException.getMessage();
+        return RouteResolution.unavailable(originalDestination, message);
+    }
+
+    private RouteEndpointResponse destinationEndpoint(double latitude, double longitude, String label) {
+        return new RouteEndpointResponse(latitude, longitude, label);
+    }
+
+    private List<RouteDestinationCandidate> destinationCandidates(double latitude, double longitude) {
+        List<RouteDestinationCandidate> candidates = new ArrayList<>();
+        for (int radiusMeters : SNAP_RADII_METERS) {
+            for (double[] direction : SNAP_DIRECTIONS) {
+                double candidateLatitude = latitude + metersToLatitudeDegrees(radiusMeters * direction[0]);
+                double candidateLongitude = longitude + metersToLongitudeDegrees(radiusMeters * direction[1], latitude);
+                if (isLatitude(candidateLatitude) && isLongitude(candidateLongitude)) {
+                    candidates.add(new RouteDestinationCandidate(
+                            candidateLatitude,
+                            candidateLongitude,
+                            (int) Math.round(distanceMeters(latitude, longitude, candidateLatitude, candidateLongitude))
+                    ));
+                }
+            }
+        }
+        candidates.sort(Comparator.comparingInt(RouteDestinationCandidate::distanceMeters));
+        return candidates;
+    }
+
+    private double metersToLatitudeDegrees(double meters) {
+        return meters / 111_320.0;
+    }
+
+    private double metersToLongitudeDegrees(double meters, double latitude) {
+        double cosine = Math.cos(Math.toRadians(latitude));
+        double denominator = 111_320.0 * Math.max(0.1, Math.abs(cosine));
+        return meters / denominator;
+    }
+
+    private double distanceMeters(double lat1, double lon1, double lat2, double lon2) {
+        double earthRadiusMeters = 6_371_000.0;
+        double dLat = Math.toRadians(lat2 - lat1);
+        double dLon = Math.toRadians(lon2 - lon1);
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+                + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
+                * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return earthRadiusMeters * c;
     }
 
     private Comparator<StationSearchItem> sortComparator(StationSearchSortOrder sortOrder) {
@@ -420,12 +541,17 @@ public class StationSearchService {
         };
     }
 
-    private String buildRouteWkt(RouteStationSearchRequest request, String routePolyline) {
+    private String buildRouteWkt(
+            RouteStationSearchRequest request,
+            String routePolyline,
+            double routeDestinationLatitude,
+            double routeDestinationLongitude
+    ) {
         List<double[]> parsed = parsePolyline(routePolyline);
         if (parsed.size() < 2) {
             parsed = List.of(
                     new double[]{request.originLatitude(), request.originLongitude()},
-                    new double[]{request.destinationLatitude(), request.destinationLongitude()}
+                    new double[]{routeDestinationLatitude, routeDestinationLongitude}
             );
         }
 
@@ -502,6 +628,47 @@ public class StationSearchService {
 
     private record FuelPriceCandidate(FuelType fuelType, int priceWon) {
     }
+
+    private record RouteDestinationCandidate(double latitude, double longitude, int distanceMeters) {
+    }
+
+    private record RouteResolution(
+            RouteNavigationResponse routeNavigation,
+            String routeStatus,
+            String routeMessage,
+            RouteEndpointResponse originalDestination,
+            RouteEndpointResponse routeDestination,
+            Integer accessDistanceMeters
+    ) {
+        private static RouteResolution ok(RouteNavigationResponse routeNavigation, RouteEndpointResponse destination) {
+            return new RouteResolution(routeNavigation, ROUTE_STATUS_OK, null, destination, destination, 0);
+        }
+
+        private static RouteResolution snapped(
+                RouteNavigationResponse routeNavigation,
+                RouteEndpointResponse originalDestination,
+                RouteEndpointResponse routeDestination,
+                int accessDistanceMeters
+        ) {
+            return new RouteResolution(
+                    routeNavigation,
+                    ROUTE_STATUS_SNAPPED,
+                    "Showing route to the nearest drivable point around the selected destination.",
+                    originalDestination,
+                    routeDestination,
+                    accessDistanceMeters
+            );
+        }
+
+        private static RouteResolution unavailable(RouteEndpointResponse destination, String routeMessage) {
+            return new RouteResolution(
+                    null,
+                    ROUTE_STATUS_UNAVAILABLE,
+                    routeMessage,
+                    destination,
+                    destination,
+                    null
+            );
+        }
+    }
 }
-
-

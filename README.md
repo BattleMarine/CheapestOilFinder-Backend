@@ -181,3 +181,13 @@ http://localhost:8080/admin/fuel-price-upload.html
 - CSV 가격이 `0`이거나 비어 있으면 해당 유종 가격은 `NULL`로 저장합니다.
 - CSV 업로드는 `gas_station`의 주소, 전화번호, 좌표를 수정하지 않습니다.
 - DB의 `gas_station`에 없는 고유번호는 FK 보호를 위해 건너뛰고, 결과 화면에 일부 목록을 표시합니다.
+### 목적지 경로 스냅 fallback
+
+`POST /api/stations/route`는 네이버 Directions 5가 선택 목적지 좌표를 차량 경로 목적지로 매칭하지 못하는 경우, 목적지 주변 후보 좌표를 가까운 순서로 재시도합니다.
+
+- 1차 요청이 성공하면 `routeStatus`는 `OK`입니다.
+- 목적지 주변 후보 좌표로 재시도해 성공하면 `routeStatus`는 `SNAPPED_TO_NEAREST_ROAD`입니다.
+- 이 경우 `originalDestination`에는 사용자가 선택한 원래 목적지 좌표가 들어가고, `routeDestination`에는 실제 차량 경로 계산에 사용한 좌표가 들어갑니다.
+- `accessDistanceMeters`는 원 목적지와 실제 경로 목적지 사이의 직선거리 추정값입니다.
+- 모든 후보가 실패하면 `routeStatus`는 `ROUTE_UNAVAILABLE`이며, `routeMessage`에 실패 사유를 담습니다.
+- 경로 주변 추천 주유소와 경유 경로 계산은 스냅이 성공한 경우 실제 경로 목적지인 `routeDestination` 기준으로 계산합니다.

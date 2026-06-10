@@ -346,6 +346,49 @@ class StationSearchServiceTest {
                 anyDouble(), anyDouble(), anyDouble(), anyDouble(), anyDouble(), anyDouble(), anyDouble());
     }
     @Test
+    void searchRoute_snaps_destination_to_nearby_road_when_direct_route_fails() {
+        when(naverDirectionsClient.fetchDrivingRoute(anyDouble(), anyDouble(), anyDouble(), anyDouble(), anyDouble()))
+                .thenThrow(new IllegalStateException("No route to selected destination"))
+                .thenReturn(new RouteNavigationResponse(
+                        "37.529900,126.929500;37.535899,126.919000",
+                        2100,
+                        420,
+                        0,
+                        1000,
+                        "traoptimal",
+                        "2026-06-10T12:00:00"
+                ));
+
+        RouteStationSearchRequest request = new RouteStationSearchRequest(
+                37.5299,
+                126.9295,
+                37.5350,
+                126.9190,
+                null,
+                5000,
+                null,
+                30.0,
+                12.0,
+                List.of(),
+                StationSearchSortOrder.ESTIMATED_TOTAL_COST_ASC,
+                RouteResultMode.ROUTE_ONLY,
+                "Origin",
+                "Bamseom"
+        );
+
+        StationSearchResponse response = service.searchRoute(request);
+
+        verify(naverDirectionsClient, times(2)).fetchDrivingRoute(anyDouble(), anyDouble(), anyDouble(), anyDouble(), anyDouble());
+        verify(stationRepository, never()).findNearbySnapshots(anyDouble(), anyDouble(), anyInt(), anyString(), anyList());
+        assertThat(response.route()).isNotNull();
+        assertThat(response.routeStatus()).isEqualTo("SNAPPED_TO_NEAREST_ROAD");
+        assertThat(response.accessDistanceMeters()).isNotNull();
+        assertThat(response.accessDistanceMeters()).isGreaterThan(0);
+        assertThat(response.originalDestination().latitude()).isEqualTo(37.5350);
+        assertThat(response.originalDestination().longitude()).isEqualTo(126.9190);
+        assertThat(response.routeDestination().latitude()).isNotEqualTo(37.5350);
+    }
+    @Test
     void getStationDetail_returns_full_fuel_snapshot() {
         StationFuelSnapshot snapshot = new StationFuelSnapshot(
                 "UNI-002",
