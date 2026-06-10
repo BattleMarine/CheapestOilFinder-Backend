@@ -23,6 +23,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
@@ -30,6 +31,8 @@ import java.util.Locale;
 @Service
 public class PlaceSearchService {
     private static final Logger log = LoggerFactory.getLogger(PlaceSearchService.class);
+    private static final int AUTO_ADDRESS_RESULT_SIZE = 10;
+    private static final int AUTO_KEYWORD_RESULT_SIZE = 15;
 
     private final KakaoLocalProperties properties;
     private final KakaoLocalClient kakaoLocalClient;
@@ -75,15 +78,17 @@ public class PlaceSearchService {
         }
 
         String normalizedQuery = normalize(rawQuery);
-        PlaceSearchMode resolvedMode = resolveMode(request.resolvedSearchMode(), rawQuery);
+        PlaceSearchMode resolvedMode = request.resolvedSearchMode();
         PlaceSearchSortOrder resolvedSortOrder = request.resolvedSortOrder();
         if (resolvedSortOrder == PlaceSearchSortOrder.DISTANCE
                 && (request.centerLatitude() == null || request.centerLongitude() == null)) {
             resolvedSortOrder = PlaceSearchSortOrder.ACCURACY;
         }
 
-        int page = request.resolvedPage();
-        int size = request.resolvedSize();
+        int page = resolvedMode == PlaceSearchMode.AUTO ? 1 : request.resolvedPage();
+        int size = resolvedMode == PlaceSearchMode.AUTO
+                ? AUTO_ADDRESS_RESULT_SIZE + AUTO_KEYWORD_RESULT_SIZE
+                : request.resolvedSize();
         Integer radiusMeters = request.resolvedRadiusMeters();
         LocalDateTime now = LocalDateTime.now();
         String cacheKey = buildCacheKey(resolvedMode, normalizedQuery, resolvedSortOrder, page, size, request.centerLatitude(), request.centerLongitude(), radiusMeters);
@@ -141,6 +146,7 @@ public class PlaceSearchService {
             String rawQuery
     ) {
         return switch (resolvedMode) {
+            case AUTO -> searchAddressAndKeyword(request, resolvedSortOrder, radiusMeters, rawQuery);
             case ADDRESS -> kakaoLocalClient.searchAddress(rawQuery, page, size);
             case KEYWORD -> kakaoLocalClient.searchKeyword(
                     rawQuery,
@@ -151,21 +157,36 @@ public class PlaceSearchService {
                     request.centerLongitude(),
                     radiusMeters
             );
-            case AUTO -> throw new IllegalStateException("AUTO mode should be resolved before Kakao search.");
         };
     }
 
-    private PlaceSearchMode resolveMode(PlaceSearchMode requestedMode, String query) {
-        if (requestedMode == null || requestedMode == PlaceSearchMode.AUTO) {
-            return looksLikeAddress(query) ? PlaceSearchMode.ADDRESS : PlaceSearchMode.KEYWORD;
-        }
-        return requestedMode;
-    }
+    private KakaoLocalSearchResult searchAddressAndKeyword(
+            PlaceSearchRequest request,
+            PlaceSearchSortOrder resolvedSortOrder,
+            Integer radiusMeters,
+            String rawQuery
+    ) {
+        KakaoLocalSearchResult addressResult = kakaoLocalClient.searchAddress(rawQuery, 1, AUTO_ADDRESS_RESULT_SIZE);
+        KakaoLocalSearchResult keywordResult = kakaoLocalClient.searchKeyword(
+                rawQuery,
+                1,
+                AUTO_KEYWORD_RESULT_SIZE,
+                resolvedSortOrder,
+                request.centerLatitude(),
+                request.centerLongitude(),
+                radiusMeters
+        );
 
-    private boolean looksLikeAddress(String query) {
-        String normalized = query.replaceAll("\\s+", "");
-        return normalized.matches(".*(로|길|대로|번길|동|읍|면|리|구|시|군|번지).*")
-                || normalized.matches(".*\\d+.*");
+        List<PlaceSearchItem> items = new ArrayList<>(addressResult.items().size() + keywordResult.items().size());
+        items.addAll(addressResult.items());
+        items.addAll(keywordResult.items());
+
+        return new KakaoLocalSearchResult(
+                addressResult.totalCount() + keywordResult.totalCount(),
+                addressResult.pageableCount() + keywordResult.pageableCount(),
+                addressResult.end() && keywordResult.end(),
+                items
+        );
     }
 
     private PlaceSearchResponse readResponse(String json) {

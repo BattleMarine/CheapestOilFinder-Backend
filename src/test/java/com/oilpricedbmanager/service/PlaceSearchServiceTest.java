@@ -100,6 +100,40 @@ class PlaceSearchServiceTest {
     }
 
     @Test
+    void autoSearchCallsAddressAndKeywordAndCombinesResults() {
+        when(placeSearchRepository.findFreshCache(any(), any())).thenReturn(Optional.empty());
+        when(kakaoLocalClient.searchAddress(eq("서울 강남구 테헤란로 152"), eq(1), eq(10))).thenReturn(
+                new KakaoLocalSearchResult(10, 10, true, placeItems("ADDR", 10))
+        );
+        when(kakaoLocalClient.searchKeyword(eq("서울 강남구 테헤란로 152"), eq(1), eq(15), eq(PlaceSearchSortOrder.ACCURACY), any(), any(), any())).thenReturn(
+                new KakaoLocalSearchResult(15, 15, true, placeItems("KEY", 15))
+        );
+
+        PlaceSearchResponse response = service.search(new PlaceSearchRequest(
+                "서울 강남구 테헤란로 152",
+                PlaceSearchMode.AUTO,
+                PlaceSearchSortOrder.ACCURACY,
+                null,
+                null,
+                37.5,
+                127.0,
+                5000
+        ));
+
+        assertThat(response.searchMode()).isEqualTo(PlaceSearchMode.AUTO);
+        assertThat(response.page()).isEqualTo(1);
+        assertThat(response.size()).isEqualTo(25);
+        assertThat(response.totalCount()).isEqualTo(25);
+        assertThat(response.pageableCount()).isEqualTo(25);
+        assertThat(response.items()).hasSize(25);
+        assertThat(response.items().get(0).placeId()).isEqualTo("ADDR-1");
+        assertThat(response.items().get(10).placeId()).isEqualTo("KEY-1");
+        verify(kakaoLocalClient).searchAddress("서울 강남구 테헤란로 152", 1, 10);
+        verify(kakaoLocalClient).searchKeyword("서울 강남구 테헤란로 152", 1, 15, PlaceSearchSortOrder.ACCURACY, 37.5, 127.0, 5000);
+        verify(placeSearchRepository).saveCache(any(), eq("AUTO"), eq("서울 강남구 테헤란로 152"), eq("서울 강남구 테헤란로 152"), eq(1), eq(25), eq("ACCURACY"), any(), any(), any(), any(), any(), eq("kakao"), eq(200), any(), any(), org.mockito.ArgumentMatchers.isNull());
+        verify(placeSearchRepository).upsertAutocompleteEntriesFromSearchResults(eq("서울 강남구 테헤란로 152"), any());
+    }
+    @Test
     void searchCallsKakaoOnCacheMiss() {
         when(placeSearchRepository.findFreshCache(any(), any())).thenReturn(Optional.empty());
         when(kakaoLocalClient.searchKeyword(any(), anyInt(), anyInt(), any(), any(), any(), any())).thenReturn(
@@ -124,5 +158,23 @@ class PlaceSearchServiceTest {
         verify(placeSearchRepository).saveCache(any(), eq("KEYWORD"), eq("강남역"), eq("강남역"), eq(1), eq(10), eq("DISTANCE"), any(), any(), any(), any(), any(), eq("kakao"), eq(200), any(), any(), org.mockito.ArgumentMatchers.isNull());
         verify(placeSearchRepository).upsertAutocompleteEntriesFromSearchResults(eq("강남역"), any());
     }
-}
 
+    private List<PlaceSearchItem> placeItems(String prefix, int count) {
+        var items = new java.util.ArrayList<PlaceSearchItem>();
+        for (int i = 1; i <= count; i++) {
+            items.add(new PlaceSearchItem(
+                    prefix + "-" + i,
+                    prefix + " 장소 " + i,
+                    "서울 강남구 테헤란로 " + i,
+                    "서울 강남구 역삼동 " + i,
+                    "장소",
+                    null,
+                    null,
+                    37.5 + (i * 0.0001),
+                    127.0 + (i * 0.0001),
+                    i
+            ));
+        }
+        return items;
+    }
+}

@@ -288,6 +288,57 @@ class StationSearchServiceTest {
         assertThat(response.stations().get(1).estimatedTotalCostWon()).isEqualTo(60000);
     }
     @Test
+    void searchRoute_orders_final_recommendations_by_total_cost_not_travel_cost_descending() {
+        when(stationRepository.findNearbySnapshots(anyDouble(), anyDouble(), anyInt(), anyString(), anyList()))
+                .thenReturn(List.of(
+                        routeSnapshot("UNI-HIGH-TRAVEL", "High Travel Cost", 10, 2000),
+                        routeSnapshot("UNI-LOW-TOTAL", "Low Total Cost", 20, 1000)
+                ));
+        when(naverDirectionsClient.fetchDrivingRoute(anyDouble(), anyDouble(), anyDouble(), anyDouble(), anyDouble()))
+                .thenReturn(new RouteNavigationResponse(
+                        "37.566500,126.978000;37.500000,127.100000",
+                        10000,
+                        600,
+                        0,
+                        1000,
+                        "traoptimal",
+                        "2026-05-28T10:00:00"
+                ));
+        when(naverDirectionsClient.fetchDrivingRouteViaWaypoint(
+                anyDouble(), anyDouble(), anyDouble(), anyDouble(), anyDouble(), anyDouble(), anyDouble()))
+                .thenReturn(
+                        detourRoute(11000),
+                        detourRoute(60000)
+                );
+
+        RouteStationSearchRequest request = new RouteStationSearchRequest(
+                37.5665,
+                126.9780,
+                37.5000,
+                127.1000,
+                null,
+                5000,
+                null,
+                30.0,
+                10.0,
+                List.of(),
+                StationSearchSortOrder.DISTANCE_ASC,
+                RouteResultMode.ROUTE_WITH_STATIONS,
+                "Origin",
+                "Destination"
+        );
+
+        StationSearchResponse response = service.searchRoute(request);
+
+        assertThat(response.stations()).hasSize(2);
+        assertThat(response.stations().get(0).stationId()).isEqualTo("UNI-LOW-TOTAL");
+        assertThat(response.stations().get(0).estimatedTravelFuelCostWon()).isEqualTo(100);
+        assertThat(response.stations().get(0).estimatedTotalCostWon()).isEqualTo(30100);
+        assertThat(response.stations().get(1).stationId()).isEqualTo("UNI-HIGH-TRAVEL");
+        assertThat(response.stations().get(1).estimatedTravelFuelCostWon()).isEqualTo(10000);
+        assertThat(response.stations().get(1).estimatedTotalCostWon()).isEqualTo(70000);
+    }
+    @Test
     void searchRoute_keeps_nearest_candidates_for_short_routes() {
         when(stationRepository.findNearbySnapshots(anyDouble(), anyDouble(), anyInt(), anyString(), anyList()))
                 .thenReturn(List.of(

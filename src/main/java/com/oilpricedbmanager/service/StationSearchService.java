@@ -159,7 +159,7 @@ public class StationSearchService {
         List<StationSearchItem> stations = selectRouteCandidates(routeCandidates)
                 .stream()
                 .map(station -> attachDetourRoute(station, request, routeResolution, fuelEfficiency, fuelAmountLiters))
-                .sorted(routeRecommendationComparator())
+                .sorted(finalRouteRecommendationComparator())
                 .limit(ROUTE_RESULT_LIMIT)
                 .collect(Collectors.toList());
 
@@ -282,6 +282,13 @@ public class StationSearchService {
                 .thenComparing(StationSearchItem::routeExtraDistanceMeters, Comparator.nullsLast(Integer::compareTo))
                 .thenComparingLong(this::routeApproximationScore)
                 .thenComparing(StationSearchItem::stationName);
+    }
+
+    private Comparator<StationSearchItem> finalRouteRecommendationComparator() {
+        return Comparator
+                .comparing(StationSearchItem::estimatedTotalCostWon, Comparator.nullsLast(Integer::compareTo))
+                .thenComparing(StationSearchItem::stationName)
+                .thenComparing(StationSearchItem::stationId);
     }
 
     private long routeApproximationScore(StationSearchItem station) {

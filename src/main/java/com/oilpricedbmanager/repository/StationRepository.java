@@ -1,7 +1,6 @@
 package com.oilpricedbmanager.repository;
 
 import com.oilpricedbmanager.domain.FuelType;
-import com.oilpricedbmanager.domain.StationFuelCandidate;
 import com.oilpricedbmanager.domain.StationFuelSnapshot;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -18,61 +17,6 @@ public class StationRepository {
 
     public StationRepository(NamedParameterJdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
-    }
-
-    public List<StationFuelCandidate> findNearby(double lat, double lon, int radiusMeters, FuelType fuelType) {
-        String priceExpression = switch (fuelType) {
-            case REGULAR_GASOLINE -> "f.gas_low";
-            case PREMIUM_GASOLINE -> "f.gas_hign";
-            case DIESEL -> "f.disl";
-            case LPG -> "f.lpg";
-        };
-
-        String sql = """
-                SELECT
-                    gs.uni_id,
-                    gs.poll_div_cd,
-                    gs.os_nm,
-                    gs.phone,
-                    gs.addr,
-                    gs.lat,
-                    gs.lon,
-                    %s AS price_per_liter,
-                    ROUND(ST_Distance(
-                        gs.geom::geography,
-                        ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography
-                    ))::int AS distance_meters,
-                    f.updated_at AS fuel_updated_at
-                FROM gas_station gs
-                JOIN fuel f ON gs.uni_id = f.uni_id
-                WHERE %s IS NOT NULL
-                  AND ST_DWithin(
-                        gs.geom::geography,
-                        ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography,
-                        :radiusMeters
-                  )
-                ORDER BY distance_meters ASC
-                LIMIT 200
-                """.formatted(priceExpression, priceExpression);
-
-        MapSqlParameterSource params = new MapSqlParameterSource()
-                .addValue("lat", lat)
-                .addValue("lon", lon)
-                .addValue("radiusMeters", radiusMeters);
-
-        return jdbcTemplate.query(sql, params, (rs, rowNum) -> new StationFuelCandidate(
-                rs.getString("uni_id"),
-                rs.getString("poll_div_cd"),
-                rs.getString("os_nm"),
-                rs.getString("phone"),
-                rs.getString("addr"),
-                rs.getDouble("lat"),
-                rs.getDouble("lon"),
-                fuelType,
-                rs.getInt("price_per_liter"),
-                rs.getInt("distance_meters"),
-                rs.getObject("fuel_updated_at", Timestamp.class).toLocalDateTime()
-        ));
     }
 
     public List<StationFuelSnapshot> findNearbySnapshots(double lat, double lon, int radiusMeters, String routeWkt, List<FuelType> fuelTypes) {
